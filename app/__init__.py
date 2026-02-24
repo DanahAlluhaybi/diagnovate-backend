@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def create_app():
     app = Flask(__name__)
 
@@ -15,12 +16,7 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key')
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret-key')
 
-    CORS(app,
-         origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-         supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-
+    CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
     db.init_app(app)
     jwt = JWTManager(app)
 
@@ -28,11 +24,13 @@ def create_app():
     from app.routes.dashboard import dashboard_bp
     from app.routes.appointments import appointments_bp
     from app.routes.enhancement import enhancement_bp
+    from app.routes.profile import profile_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(appointments_bp)
     app.register_blueprint(enhancement_bp)
+    app.register_blueprint(profile_bp)
 
     with app.app_context():
         db.create_all()
