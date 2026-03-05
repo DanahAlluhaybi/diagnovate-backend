@@ -38,17 +38,22 @@ class Doctor(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
-
+#1
 class Patient(db.Model):
-    __tablename__ = 'patients'
+    __tablename__ = 'patients'  #  "patients"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)  #  primary key
     patient_id = db.Column(db.String(50), unique=True, nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    age = db.Column(db.Integer)
-    gender = db.Column(db.String(10))
-    phone = db.Column(db.String(20))
+    mrn = db.Column(db.String(50), unique=True, nullable=False)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    age = db.Column(db.Integer, nullable=False)
+    gender = db.Column(db.String(10), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
     email = db.Column(db.String(100))
+    last_visit = db.Column(db.Date)
+    status = db.Column(db.String(20), default='Active')
+    condition = db.Column(db.String(200))
     address = db.Column(db.String(200))
     doctor_id = db.Column(db.Integer, db.ForeignKey('doctors.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -58,18 +63,21 @@ class Patient(db.Model):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'patient_id': self.patient_id,
-            'name': self.name,
+            'id': self.patient_id,
+            'mrn': self.mrn,
+            'firstName': self.first_name,
+            'lastName': self.last_name,
             'age': self.age,
             'gender': self.gender,
             'phone': self.phone,
-            'email': self.email,
+            'email': self.email or '',
+            'lastVisit': self.last_visit.strftime('%Y-%m-%d') if self.last_visit else '',
+            'status': self.status,
+            'condition': self.condition or '',
             'address': self.address,
             'doctor_id': self.doctor_id,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
-
 
 class Case(db.Model):
     __tablename__ = 'cases'
@@ -156,3 +164,6 @@ class Appointment(db.Model):
             'doctor_id': self.doctor_id,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+

@@ -25,12 +25,16 @@ def create_app():
     from app.routes.appointments import appointments_bp
     from app.routes.enhancement import enhancement_bp
     from app.routes.profile import profile_bp
+    #1
+    from app.routes.patients import patients_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(appointments_bp)
     app.register_blueprint(enhancement_bp)
     app.register_blueprint(profile_bp)
+    #1
+    app.register_blueprint(patients_bp)
 
     with app.app_context():
         db.create_all()
