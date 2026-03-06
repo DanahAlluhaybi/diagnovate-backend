@@ -3,9 +3,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 
-requests = [
-
-]
+requests = []
 
 
 @app.route('/api/requests', methods=['GET'])
