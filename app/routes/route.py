@@ -4,8 +4,7 @@ app = Flask(__name__)
 
 
 requests = [
-    {'id': 1, 'name': 'Dr. Sara', 'email': 'sara@mail.com', 'specialty': 'Endocrinologist', 'status': 'Pending'},
-    {'id': 2, 'name': 'Dr. Ahmed', 'email': 'ahmed@mail.com', 'specialty': 'Cardiology', 'status': 'Pending'}
+
 ]
 
 
