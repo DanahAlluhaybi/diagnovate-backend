@@ -4,6 +4,8 @@ from flask_cors import CORS
 from app.models import db
 import os
 from dotenv import load_dotenv
+from app.routes.route import requests_bp
+app.register_blueprint(requests_bp)
 
 load_dotenv()
 

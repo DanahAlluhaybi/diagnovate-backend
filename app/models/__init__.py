@@ -166,4 +166,3 @@ class Appointment(db.Model):
         }
 
 
-
