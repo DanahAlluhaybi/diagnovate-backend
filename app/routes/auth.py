@@ -55,8 +55,9 @@ def signup():
         db.session.add(doctor)
         db.session.commit()
 
+        # ✅ تم التعديل هنا: تحويل الـ id إلى string
         access_token = create_access_token(
-            identity=doctor.id,
+            identity=str(doctor.id),
             expires_delta=timedelta(days=7)
         )
 
@@ -75,6 +76,7 @@ def signup():
         db.session.rollback()
         print(f"ERROR in signup: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
 
 @auth_bp.route('/api/auth/login', methods=['POST', 'OPTIONS'])
 def login():
@@ -97,8 +99,9 @@ def login():
             return jsonify({'error': 'Invalid email or password'}), 401
 
         if doctor.check_password(data['password']):
+            # ✅ تم التعديل هنا: تحويل الـ id إلى string
             access_token = create_access_token(
-                identity=doctor.id,
+                identity=str(doctor.id),
                 expires_delta=timedelta(days=7)
             )
             return jsonify({
