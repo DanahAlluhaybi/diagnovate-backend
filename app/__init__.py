@@ -35,6 +35,8 @@ def create_app():
     from app.routes.enhancement import enhancement_bp
     from app.routes.profile import profile_bp
     from app.routes.patients import patients_bp
+    from app.routes.forgot_password import forgot_password_bp
+
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -42,6 +44,7 @@ def create_app():
     app.register_blueprint(enhancement_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(patients_bp)
+    app.register_blueprint(forgot_password_bp)
 
     with app.app_context():
         db.create_all()
