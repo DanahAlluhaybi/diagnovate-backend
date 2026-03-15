@@ -32,7 +32,7 @@ def forgot_password():
         if not sender_email or not sender_password:
             return jsonify({'error': 'Mail settings are missing'}), 500
 
-        reset_link = f"http://localhost:5000/reset-password?email={email}"
+        reset_link = f"http://localhost:5002/reset-password?email={email}"
 
         # إعداد الرسالة
         msg = MIMEMultipart()
