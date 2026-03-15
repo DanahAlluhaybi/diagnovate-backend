@@ -23,7 +23,7 @@ def create_app():
     def after_request(response):
         response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')  # ← أضفت PATCH
         return response
 
     db.init_app(app)

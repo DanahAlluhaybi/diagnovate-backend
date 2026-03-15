@@ -16,28 +16,18 @@ def validate_email(email):
 def signup():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-
     try:
         data = request.get_json()
-        print("=" * 50)
-        print("SIGNUP REQUEST RECEIVED")
-        print(f"Data received: {data}")
-
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-
         if not data.get('name'):
             return jsonify({'error': 'Name is required'}), 400
-
         if not data.get('email'):
             return jsonify({'error': 'Email is required'}), 400
-
         if not data.get('password'):
             return jsonify({'error': 'Password is required'}), 400
-
         if not validate_email(data['email']):
             return jsonify({'error': 'Invalid email format'}), 400
-
         if len(data['password']) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
 
@@ -51,11 +41,9 @@ def signup():
             specialty=data.get('specialty', 'Thyroid Specialist')
         )
         doctor.set_password(data['password'])
-
         db.session.add(doctor)
         db.session.commit()
 
-        # ✅ تم التعديل هنا: تحويل الـ id إلى string
         access_token = create_access_token(
             identity=str(doctor.id),
             expires_delta=timedelta(days=7)
@@ -63,18 +51,18 @@ def signup():
 
         return jsonify({
             'success': True,
-            'access_token': access_token,
-            'doctor': {
-                'id': doctor.id,
-                'name': doctor.name,
-                'email': doctor.email,
+            'token': access_token,          # ← فرونت يدور 'token'
+            'access_token': access_token,   # ← احتياطي
+            'user': {
+                'id':        doctor.id,
+                'name':      doctor.name,
+                'email':     doctor.email,
                 'specialty': doctor.specialty
             }
         }), 201
 
     except Exception as e:
         db.session.rollback()
-        print(f"ERROR in signup: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -82,41 +70,33 @@ def signup():
 def login():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-
     try:
         data = request.get_json()
-        print("LOGIN REQUEST RECEIVED")
-
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-
         if not data.get('email') or not data.get('password'):
             return jsonify({'error': 'Email and password required'}), 400
 
         doctor = Doctor.query.filter_by(email=data['email']).first()
-
-        if not doctor:
+        if not doctor or not doctor.check_password(data['password']):
             return jsonify({'error': 'Invalid email or password'}), 401
 
-        if doctor.check_password(data['password']):
-            # ✅ تم التعديل هنا: تحويل الـ id إلى string
-            access_token = create_access_token(
-                identity=str(doctor.id),
-                expires_delta=timedelta(days=7)
-            )
-            return jsonify({
-                'success': True,
-                'access_token': access_token,
-                'doctor': {
-                    'id': doctor.id,
-                    'name': doctor.name,
-                    'email': doctor.email,
-                    'specialty': doctor.specialty
-                }
-            }), 200
+        access_token = create_access_token(
+            identity=str(doctor.id),
+            expires_delta=timedelta(days=7)
+        )
 
-        return jsonify({'error': 'Invalid email or password'}), 401
+        return jsonify({
+            'success': True,
+            'token': access_token,          # ← فرونت يدور 'token'
+            'access_token': access_token,   # ← احتياطي
+            'user': {
+                'id':        doctor.id,
+                'name':      doctor.name,
+                'email':     doctor.email,
+                'specialty': doctor.specialty
+            }
+        }), 200
 
     except Exception as e:
-        print(f"ERROR in login: {str(e)}")
         return jsonify({'error': str(e)}), 500
