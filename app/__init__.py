@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def create_app():
     app = Flask(__name__)
 
@@ -14,6 +15,8 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key')
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret-key')
+
+    CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
 
     @app.route('/api/<path:path>', methods=['OPTIONS'])
     def options_handler(path=None):
@@ -23,7 +26,7 @@ def create_app():
     def after_request(response):
         response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')  # ← أضفت PATCH
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')
         return response
 
     db.init_app(app)
@@ -36,7 +39,7 @@ def create_app():
     from app.routes.profile import profile_bp
     from app.routes.patients import patients_bp
     from app.routes.forgot_password import forgot_password_bp
-
+    from app.routes.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -45,6 +48,7 @@ def create_app():
     app.register_blueprint(profile_bp)
     app.register_blueprint(patients_bp)
     app.register_blueprint(forgot_password_bp)
+    app.register_blueprint(admin_bp)
 
     with app.app_context():
         db.create_all()
