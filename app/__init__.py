@@ -1,6 +1,5 @@
 from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
-from flask_cors import CORS
 from app.models import db
 import os
 from dotenv import load_dotenv
@@ -23,7 +22,7 @@ def create_app():
     def after_request(response):
         response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')  # ← أضفت PATCH
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')
         return response
 
     db.init_app(app)
@@ -35,6 +34,7 @@ def create_app():
     from app.routes.enhancement import enhancement_bp
     from app.routes.profile import profile_bp
     from app.routes.patients import patients_bp
+    from app.routes.diagnosis import diagnosis_bp  # ✅ جوّا
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -42,6 +42,7 @@ def create_app():
     app.register_blueprint(enhancement_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(patients_bp)
+    app.register_blueprint(diagnosis_bp)  # ✅ جوّا
 
     with app.app_context():
         db.create_all()
