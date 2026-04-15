@@ -1,22 +1,36 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
-import joblib
 import numpy as np
+import pandas as pd
 import os
 
 diagnosis_bp = Blueprint('diagnosis', __name__)
 
-# ── تحميل الموديل عند بدء السيرفر ──
+# ── تحميل المودل عند بدء السيرفر ──
 MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'ml')
+MODEL_PATH = os.path.join(MODEL_DIR, 'thyroid_model.pkl')
+FEATURES_PATH = os.path.join(MODEL_DIR, 'feature_columns.pkl')
+ENCODERS_PATH = os.path.join(MODEL_DIR, 'label_encoders.pkl')
 
-try:
-    model           = joblib.load(os.path.join(MODEL_DIR, 'thyroid_model.pkl'))
-    label_encoders  = joblib.load(os.path.join(MODEL_DIR, 'label_encoders.pkl'))
-    feature_columns = joblib.load(os.path.join(MODEL_DIR, 'feature_columns.pkl'))
-    print("✅ Thyroid model loaded successfully")
-except Exception as e:
-    model = None
-    print(f"⚠️ Could not load model: {e}")
+model = None
+feature_columns = None
+label_encoders = None
+
+def load_model():
+    global model, feature_columns, label_encoders
+    try:
+        import joblib
+        model = joblib.load(MODEL_PATH)
+        feature_columns = joblib.load(FEATURES_PATH)
+        label_encoders = joblib.load(ENCODERS_PATH)
+        print("✅ Thyroid model loaded successfully")
+        return True
+    except Exception as e:
+        print(f"⚠️ Could not load model: {e}")
+        return False
+
+# تحميل المودل مباشرة
+load_model()
 
 
 @diagnosis_bp.route('/api/diagnosis/predict', methods=['POST', 'OPTIONS'])
@@ -33,36 +47,65 @@ def predict():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        # ── بناء الـ input من القيم المُرسلة ──
-        input_values = []
-        missing = []
+        # ── تحويل المدخلات إلى DataFrame ──
+        input_df = pd.DataFrame([data])
 
+        # ── التأكد من وجود جميع الأعمدة المطلوبة ──
         for col in feature_columns:
-            val = data.get(col)
-            if val is None:
-                missing.append(col)
+            if col not in input_df.columns:
+                input_df[col] = np.nan
+
+        # ── تطبيق نفس preprocessing اللي سويناه في التدريب ──
+        # 1. تحويل الأعمدة الرقمية
+        for col in input_df.columns:
+            if col == 'target':
+                continue
+            try:
+                input_df[col] = pd.to_numeric(input_df[col])
+            except (ValueError, TypeError):
+                pass
+
+        # 2. تعبئة القيم الناقصة (نفس طريقة التدريب)
+        for col in input_df.columns:
+            if col == 'target':
+                continue
+            if input_df[col].dtype in ['float64', 'int64']:
+                # نستخدم median زي ما سوينا في التدريب
+                input_df[col] = input_df[col].fillna(input_df[col].median())
             else:
-                # تحويل القيم النصية إذا كان العمود يحتاج encoding
-                if col in label_encoders:
+                # نستخدم mode للأعمدة النصية
+                mode_val = input_df[col].mode()
+                if not mode_val.empty:
+                    input_df[col] = input_df[col].fillna(mode_val[0])
+                else:
+                    input_df[col] = input_df[col].fillna('f')
+
+        # 3. تطبيق Label Encoding للأعمدة النصية
+        for col in label_encoders:
+            if col == 'target':
+                continue
+            if col in input_df.columns:
+                le = label_encoders[col]
+                # التعامل مع القيم الجديدة غير المرئية
+                def encode_value(x):
                     try:
-                        val = label_encoders[col].transform([str(val)])[0]
-                    except Exception:
-                        val = 0
-                input_values.append(float(val))
+                        return le.transform([str(x)])[0]
+                    except:
+                        return -1  # قيمة افتراضية للقيم الجديدة
+                input_df[col] = input_df[col].apply(encode_value)
 
-        if missing:
-            return jsonify({
-                'error': f'Missing fields: {missing}',
-                'required_fields': feature_columns
-            }), 400
+        # 4. ترتيب الأعمدة حسب feature_columns
+        input_df = input_df[feature_columns]
 
-        input_array = np.array([input_values])
-        prediction  = model.predict(input_array)[0]
-        probability = model.predict_proba(input_array)[0]
+        # 5. التأكد من عدم وجود قيم None
+        input_df = input_df.fillna(0)
+
+        # ── التنبؤ ──
+        prediction = model.predict(input_df)[0]
+        probability = model.predict_proba(input_df)[0]
 
         # ── تحويل النتيجة لنص مفهوم ──
-        target_encoder = label_encoders.get('target') or label_encoders.get('diagnosis') or label_encoders.get('class')
-
+        target_encoder = label_encoders.get('target')
         if target_encoder:
             label = target_encoder.inverse_transform([int(prediction)])[0]
         else:
@@ -70,29 +113,32 @@ def predict():
 
         # ── تصنيف النتيجة ──
         label_lower = str(label).lower()
-        if 'negative' in label_lower or 'normal' in label_lower or label_lower == '0':
-            status   = 'Normal'
+        if 'normal' in label_lower:
+            status = 'Normal'
             severity = 'low'
         elif 'hypo' in label_lower:
-            status   = 'Hypothyroidism'
+            status = 'Hypothyroidism'
             severity = 'high'
         elif 'hyper' in label_lower:
-            status   = 'Hyperthyroidism'
+            status = 'Hyperthyroidism'
             severity = 'high'
         else:
-            status   = label
+            status = label
             severity = 'medium'
 
+        # تحويل الاحتمالات إلى نسب مئوية
+        prob_dict = {}
+        for i, p in enumerate(probability):
+            class_name = target_encoder.inverse_transform([i])[0] if target_encoder else str(i)
+            prob_dict[class_name] = round(float(p) * 100, 2)
+
         return jsonify({
-            'success':    True,
-            'diagnosis':  status,
-            'raw_label':  label,
+            'success': True,
+            'diagnosis': status,
+            'raw_label': label,
             'confidence': round(float(max(probability)) * 100, 2),
-            'severity':   severity,
-            'probabilities': {
-                str(i): round(float(p) * 100, 2)
-                for i, p in enumerate(probability)
-            }
+            'severity': severity,
+            'probabilities': prob_dict
         }), 200
 
     except Exception as e:
