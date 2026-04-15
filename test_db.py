@@ -1,23 +1,7 @@
-# test_db.py
-'''from app import create_app
-from app.models import db, Doctor
-
-app = create_app()
-
-with app.app_context():
-    # شوف كل الدكاترة
-    doctors = Doctor.query.all()
-    print(f"عدد الدكاترة: {len(doctors)}")
-
-    for doctor in doctors:
-        print(f"ID: {doctor.id}")
-        print(f"Name: {doctor.name}")
-        print(f"Email: {doctor.email}")
-        print(f"Password Hash: {doctor.password_hash[:50]}...")
-        print("-" * 50)'''
-
-
-
+"""
+test_db.py — Run once to create admin accounts and verify DB
+Usage: python test_db.py
+"""
 from app import create_app
 from app.models import db, Doctor, Admin
 import sqlalchemy as sa
@@ -26,15 +10,16 @@ app = create_app()
 
 with app.app_context():
 
+    # ── Add status column if missing (migration) ──
     with db.engine.connect() as conn:
         try:
             conn.execute(sa.text('ALTER TABLE doctors ADD COLUMN status VARCHAR(20) DEFAULT "pending"'))
             print("✅ Added status column")
-        except:
-            print("ℹ️ status column already exists")
+        except Exception:
+            print("ℹ️  status column already exists")
         conn.commit()
 
-
+    # ── Seed Admins ──────────────────────────────
     ADMINS = [
         {"name": "Renad Hamed Almazroi",   "email": "renad@test.com",  "password": "Admin@1234"},
         {"name": "Jana Mohammed Alghamdi", "email": "jana@test.com",   "password": "Admin@1234"},
@@ -44,23 +29,20 @@ with app.app_context():
     ]
 
     for admin_info in ADMINS:
-        existing = Admin.query.filter_by(email=admin_info["email"]).first()
-        if existing:
-            print(f"ℹ️ Already exists: {admin_info['name']}")
-        else:
-            admin = Admin(
-                name=admin_info["name"],
-                email=admin_info["email"]
-            )
+        if not Admin.query.filter_by(email=admin_info["email"]).first():
+            admin = Admin(name=admin_info["name"], email=admin_info["email"])
             admin.set_password(admin_info["password"])
             db.session.add(admin)
             print(f"✅ Created admin: {admin_info['name']}")
+        else:
+            print(f"ℹ️  Already exists: {admin_info['name']}")
 
     db.session.commit()
 
-    # ──  عرض كل الأدمن للتحقق─
-    print("\n── All Admins ─────")
-    admins = Admin.query.all()
-    print(f"Total admins: {len(admins)}")
-    for a in admins:
-        print(f"ID: {a.id} | {a.name} | {a.email}")
+    # ── Summary ──────────────────────────────────
+    print(f"\n── DB Summary ─────────────────")
+    print(f"Admins:  {Admin.query.count()}")
+    print(f"Doctors: {Doctor.query.count()}")
+    print(f"  pending:  {Doctor.query.filter_by(status='pending').count()}")
+    print(f"  active:   {Doctor.query.filter_by(status='active').count()}")
+    print(f"  rejected: {Doctor.query.filter_by(status='rejected').count()}")

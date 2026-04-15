@@ -11,7 +11,7 @@ patients_bp = Blueprint('patients', __name__)
 def get_patients():
     try:
         doctor_id = int(get_jwt_identity())
-        patients = Patient.query.filter_by(doctor_id=doctor_id).all()
+        patients  = Patient.query.filter_by(doctor_id=doctor_id).all()
         return jsonify({'success': True, 'data': [p.to_dict() for p in patients]}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -22,7 +22,7 @@ def get_patients():
 def get_patient(patient_id):
     try:
         doctor_id = int(get_jwt_identity())
-        patient = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
+        patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
         return jsonify({'success': True, 'data': patient.to_dict()}), 200
@@ -35,39 +35,43 @@ def get_patient(patient_id):
 def create_patient():
     try:
         doctor_id = int(get_jwt_identity())
-        data = request.get_json()
+        data      = request.get_json(force=True, silent=True)
 
         required = ['firstName', 'lastName', 'mrn', 'age', 'phone', 'gender']
         for field in required:
-            if field not in data:
+            if not data or field not in data:
                 return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
+
+        # ✅ Check MRN uniqueness
+        if Patient.query.filter_by(mrn=data['mrn']).first():
+            return jsonify({'success': False, 'error': 'MRN already exists'}), 400
 
         last_patient = Patient.query.order_by(Patient.id.desc()).first()
         try:
             last_num = int(last_patient.patient_id.split('-')[1]) if last_patient else 0
         except Exception:
             last_num = 0
-        patient_id = f"PT-{str(last_num + 1).zfill(3)}"
+        patient_id = f"PT-{str(last_num + 1).zfill(4)}"
 
         new_patient = Patient(
-            patient_id=patient_id,
-            mrn=data['mrn'],
-            first_name=data['firstName'],
-            last_name=data['lastName'],
-            age=int(data['age']),
-            gender=data['gender'],
-            phone=data['phone'],
-            email=data.get('email', ''),
-            condition=data.get('condition', ''),
-            status=data.get('status', 'Active'),
-            last_visit=datetime.now().date(),
-            doctor_id=doctor_id,
+            patient_id = patient_id,
+            mrn        = data['mrn'],
+            first_name = data['firstName'],
+            last_name  = data['lastName'],
+            age        = int(data['age']),
+            gender     = data['gender'],
+            phone      = data['phone'],
+            email      = data.get('email', ''),
+            condition  = data.get('condition', ''),
+            status     = data.get('status', 'Active'),
+            last_visit = datetime.now().date(),
+            doctor_id  = doctor_id,
         )
 
         db.session.add(new_patient)
         db.session.commit()
 
-        return jsonify({'success': True, 'message': 'Patient created successfully', 'data': new_patient.to_dict()}), 201
+        return jsonify({'success': True, 'message': 'Patient created', 'data': new_patient.to_dict()}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -79,11 +83,11 @@ def create_patient():
 def update_patient(patient_id):
     try:
         doctor_id = int(get_jwt_identity())
-        patient = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
+        patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
 
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True) or {}
         if 'firstName'  in data: patient.first_name = data['firstName']
         if 'lastName'   in data: patient.last_name  = data['lastName']
         if 'mrn'        in data: patient.mrn        = data['mrn']
@@ -106,11 +110,11 @@ def update_patient(patient_id):
 def patch_patient(patient_id):
     try:
         doctor_id = int(get_jwt_identity())
-        patient = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
+        patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
 
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True) or {}
         if 'status'    in data: patient.status    = data['status']
         if 'condition' in data: patient.condition = data['condition']
 
@@ -126,13 +130,13 @@ def patch_patient(patient_id):
 def delete_patient(patient_id):
     try:
         doctor_id = int(get_jwt_identity())
-        patient = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
+        patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
 
         db.session.delete(patient)
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Patient deleted successfully'}), 200
+        return jsonify({'success': True, 'message': 'Patient deleted'}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500

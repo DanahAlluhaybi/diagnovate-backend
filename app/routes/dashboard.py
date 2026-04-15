@@ -1,8 +1,7 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Case, Patient
-from datetime import date, datetime, timedelta
-from sqlalchemy import func
+from datetime import date, timedelta
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -11,37 +10,28 @@ dashboard_bp = Blueprint('dashboard', __name__)
 @jwt_required()
 def get_stats():
     try:
-        doctor_id = get_jwt_identity()
-        today = date.today()
+        doctor_id = int(get_jwt_identity())
+        today     = date.today()
 
-        # Active cases
-        active_cases = Case.query.filter_by(
-            doctor_id=doctor_id,
-            status='active'
-        ).count()
-
-        # Urgent cases (Bethesda III+)
-        urgent_cases = Case.query.filter(
+        active_cases   = Case.query.filter_by(doctor_id=doctor_id, status='active').count()
+        urgent_cases   = Case.query.filter(
             Case.doctor_id == doctor_id,
             Case.bethesda_category.in_(['III', 'IV', 'V', 'VI'])
         ).count()
-
-        # Total patients
         total_patients = Patient.query.filter_by(doctor_id=doctor_id).count()
 
-        # Completed cases this month
-        first_day = date(today.year, today.month, 1)
+        first_day       = date(today.year, today.month, 1)
         completed_cases = Case.query.filter(
-            Case.doctor_id == doctor_id,
-            Case.status == 'completed',
+            Case.doctor_id  == doctor_id,
+            Case.status     == 'completed',
             Case.updated_at >= first_day
         ).count()
 
         return jsonify({
-            'active_cases': active_cases,
-            'urgent_cases': urgent_cases,
-            'total_patients': total_patients,
-            'completed_cases': completed_cases
+            'active_cases':    active_cases,
+            'urgent_cases':    urgent_cases,
+            'total_patients':  total_patients,
+            'completed_cases': completed_cases,
         }), 200
 
     except Exception as e:
@@ -52,17 +42,10 @@ def get_stats():
 @jwt_required()
 def get_recent_cases():
     try:
-        doctor_id = get_jwt_identity()
-
+        doctor_id    = int(get_jwt_identity())
         recent_cases = Case.query.filter_by(doctor_id=doctor_id) \
-            .order_by(Case.created_at.desc()) \
-            .limit(10) \
-            .all()
-
-        cases_list = [case.to_dict() for case in recent_cases]
-
-        return jsonify(cases_list), 200
-
+            .order_by(Case.created_at.desc()).limit(10).all()
+        return jsonify([case.to_dict() for case in recent_cases]), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -71,20 +54,12 @@ def get_recent_cases():
 @jwt_required()
 def get_cases_by_status():
     try:
-        doctor_id = get_jwt_identity()
-
-        cases = Case.query.filter_by(doctor_id=doctor_id).all()
-        status_count = {
-            'active': 0,
-            'completed': 0,
-            'follow-up': 0
-        }
-
+        doctor_id    = int(get_jwt_identity())
+        cases        = Case.query.filter_by(doctor_id=doctor_id).all()
+        status_count = {'active': 0, 'completed': 0, 'follow-up': 0}
         for case in cases:
             if case.status in status_count:
                 status_count[case.status] += 1
-
         return jsonify(status_count), 200
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
