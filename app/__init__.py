@@ -30,19 +30,22 @@ def create_app():
 
     from app.routes.auth import auth_bp
     from app.routes.dashboard import dashboard_bp
-    from app.routes.appointments import appointments_bp
+    #from app.routes.appointments import appointments_bp
     from app.routes.enhancement import enhancement_bp
     from app.routes.profile import profile_bp
     from app.routes.patients import patients_bp
     from app.routes.diagnosis import diagnosis_bp  # ✅ جوّا
+    from app.routes.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
-    app.register_blueprint(appointments_bp)
+    #app.register_blueprint(appointments_bp)
     app.register_blueprint(enhancement_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(patients_bp)
     app.register_blueprint(diagnosis_bp)  # ✅ جوّا
+
+    app.register_blueprint(admin_bp)
 
     with app.app_context():
         db.create_all()
