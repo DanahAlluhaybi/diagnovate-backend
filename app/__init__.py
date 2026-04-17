@@ -20,7 +20,7 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH']             = 16 * 1024 * 1024
 
     CORS(app, resources={r"/api/*": {
-        "origins":       ["http://localhost:3000", "http://127.0.0.1:3000"],
+        "origins":       ["http://localhost:3000", "http://127.0.0.1:3000", "https://diagnovate-41rg.vercel.app"],
         "methods":       ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Accept"]
     }})
