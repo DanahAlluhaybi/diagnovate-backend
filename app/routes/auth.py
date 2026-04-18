@@ -25,7 +25,6 @@ def get_twilio():
         raise RuntimeError("Twilio credentials not configured")
     return Client(account_sid, auth_token)
 
-_pending = {}
 
 def validate_email(email):
     return re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email) is not None
@@ -102,13 +101,13 @@ def signup():
         if Doctor.query.filter_by(phone=phone).first():
             return jsonify({'error': 'رقم الهاتف مسجل مسبقاً'}), 400
 
-        _pending[phone] = {
-            'name':      name,
-            'email':     email,
-            'phone':     phone,
-            'password':  generate_password_hash(password),
-            'specialty': specialty,
-        }
+        Doctor.query.filter_by(phone=phone, status='pending_otp').delete()
+        Doctor.query.filter_by(email=email, status='pending_otp').delete()
+        db.session.commit()
+        doctor = Doctor(name=name, email=email, phone=phone, specialty=specialty, status='pending_otp')
+        doctor.password_hash = generate_password_hash(password)
+        db.session.add(doctor)
+        db.session.commit()
 
         if is_dev_mode():
             print(f"⚠️ DEV_MODE — OTP للرقم {phone} هو 123456")
@@ -144,8 +143,8 @@ def verify_signup():
         if not phone or not code:
             return jsonify({'error': 'رقم الهاتف والكود مطلوبان'}), 400
 
-        pending = _pending.get(phone)
-        if not pending:
+        doctor = Doctor.query.filter_by(phone=phone, status='pending_otp').first()
+        if not doctor:
             return jsonify({'error': 'لا يوجد تسجيل معلق لهذا الرقم، سجّل من جديد'}), 400
 
         if is_dev_mode():
@@ -157,26 +156,10 @@ def verify_signup():
             if result.status != 'approved':
                 return jsonify({'error': 'الكود غير صحيح أو منتهي الصلاحية'}), 401
 
-        if Doctor.query.filter_by(email=pending['email']).first():
-            _pending.pop(phone, None)
-            return jsonify({'error': 'البريد الإلكتروني مسجل مسبقاً'}), 400
-        if Doctor.query.filter_by(phone=phone).first():
-            _pending.pop(phone, None)
-            return jsonify({'error': 'رقم الهاتف مسجل مسبقاً'}), 400
-
-        doctor = Doctor(
-            name=pending['name'],
-            email=pending['email'],
-            phone=pending['phone'],
-            specialty=pending['specialty'],
-        )
-        doctor.password_hash = pending['password']
-        db.session.add(doctor)
+        doctor.status = 'pending'
         db.session.commit()
 
-        _pending.pop(phone, None)
-
-        send_welcome_email(pending['email'], pending['name'])
+        send_welcome_email(doctor.email, doctor.name)
 
         access_token = create_access_token(
             identity=str(doctor.id),
