@@ -13,3 +13,4 @@ scikit-learn>=1.4.0
 gunicorn==21.2.0
 resend
 psycopg2-binary
+xgboost==2.0.3
