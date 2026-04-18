@@ -11,8 +11,10 @@ auth_bp = Blueprint('auth', __name__)
 ACCOUNT_SID  = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN   = os.getenv("TWILIO_AUTH_TOKEN")
 SERVICE_SID  = os.getenv("TWILIO_SERVICE_SID")
-DEV_MODE     = os.getenv("DEV_MODE", "false").lower() == "true"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://diagnovate.org")
+
+def is_dev_mode():
+    return os.getenv("DEV_MODE", "false").lower() == "true"
 
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 
@@ -76,9 +78,6 @@ def send_welcome_email(email, doctor_name):
         print(f"⚠️ Failed to send welcome email: {e}")
 
 
-# ════════════════════════════════════════════
-#  التسجيل — الخطوة 1: تحقق وأرسل OTP
-# ════════════════════════════════════════════
 @auth_bp.route('/api/auth/signup', methods=['POST', 'OPTIONS'])
 def signup():
     if request.method == 'OPTIONS':
@@ -113,7 +112,7 @@ def signup():
             'specialty': specialty,
         }
 
-        if DEV_MODE:
+        if is_dev_mode():
             print(f"⚠️ DEV_MODE — OTP للرقم {phone} هو 123456")
             return jsonify({
                 'success':    True,
@@ -135,9 +134,6 @@ def signup():
         return jsonify({'error': str(e)}), 500
 
 
-# ════════════════════════════════════════════
-#  التسجيل — الخطوة 2: تحقق من OTP ثم احفظ
-# ════════════════════════════════════════════
 @auth_bp.route('/api/auth/verify-signup', methods=['POST', 'OPTIONS'])
 def verify_signup():
     if request.method == 'OPTIONS':
@@ -154,7 +150,7 @@ def verify_signup():
         if not pending:
             return jsonify({'error': 'لا يوجد تسجيل معلق لهذا الرقم، سجّل من جديد'}), 400
 
-        if DEV_MODE:
+        if is_dev_mode():
             if code != '123456':
                 return jsonify({'error': 'كود خاطئ (DEV: استخدم 123456)'}), 401
         else:
@@ -182,7 +178,6 @@ def verify_signup():
 
         _pending.pop(phone, None)
 
-        # ✅ إرسال إيميل ترحيب بعد التسجيل
         send_welcome_email(pending['email'], pending['name'])
 
         access_token = create_access_token(
@@ -207,9 +202,6 @@ def verify_signup():
         return jsonify({'error': str(e)}), 500
 
 
-# ════════════════════════════════════════════
-#  تسجيل الدخول — إيميل + كلمة مرور فقط
-# ════════════════════════════════════════════
 @auth_bp.route('/api/auth/login', methods=['POST', 'OPTIONS'])
 def login():
     if request.method == 'OPTIONS':
