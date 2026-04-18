@@ -11,14 +11,7 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__)
-    turso_url = os.getenv('DATABASE_URL', 'sqlite:///diagnovate.db')
-    turso_token = os.getenv('TURSO_AUTH_TOKEN', '')
-
-    if turso_token and turso_url.startswith('libsql://'):
-        https_url = turso_url.replace('libsql://', 'https://')
-        app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite+{https_url}?authToken={turso_token}&secure=true"
-    else:
-        app.config['SQLALCHEMY_DATABASE_URI'] = turso_url
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///diagnovate.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY']                 = os.getenv('JWT_SECRET_KEY', 'super-secret-key')
     app.config['SECRET_KEY']                     = os.getenv('SECRET_KEY', 'secret-key')
