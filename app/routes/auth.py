@@ -53,7 +53,7 @@ def send_welcome_email(email, doctor_name):
         <p>Our admin team will review your request and you will receive an email with the approval or rejection decision.</p>
         <p>You can track your request status by visiting your profile page.</p>
         <div style="text-align:center;margin:32px 0">
-            <a href="{FRONTEND_URL}/dashboard" style="background:#0066CC;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold">
+            <a href="{FRONTEND_URL}/pending-approval" style="background:#0066CC;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold">
                 Track Your Request
             </a>
         </div>
