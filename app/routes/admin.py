@@ -298,3 +298,15 @@ def debug_doctors():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/create-first-admin', methods=['POST'])
+def create_first_admin():
+    from app.models import Admin
+    if Admin.query.count() > 0:
+        return jsonify({'error': 'Admin already exists'}), 400
+    admin = Admin(name="Admin", email="admin@diagnovate.org")
+    admin.set_password("Admin@1234")
+    db.session.add(admin)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Admin created'})
