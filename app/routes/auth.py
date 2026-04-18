@@ -18,14 +18,12 @@ def is_dev_mode():
 
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 
-_twilio = None
 def get_twilio():
-    global _twilio
-    if _twilio is None:
-        if not ACCOUNT_SID or not AUTH_TOKEN:
-            raise RuntimeError("Twilio credentials not configured")
-        _twilio = Client(ACCOUNT_SID, AUTH_TOKEN)
-    return _twilio
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token  = os.getenv("TWILIO_AUTH_TOKEN")
+    if not account_sid or not auth_token:
+        raise RuntimeError("Twilio credentials not configured")
+    return Client(account_sid, auth_token)
 
 _pending = {}
 
