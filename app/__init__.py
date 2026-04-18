@@ -15,7 +15,8 @@ def create_app():
     turso_token = os.getenv('TURSO_AUTH_TOKEN', '')
 
     if turso_token and turso_url.startswith('libsql://'):
-        app.config['SQLALCHEMY_DATABASE_URI'] = f"{turso_url}?authToken={turso_token}"
+        https_url = turso_url.replace('libsql://', 'https://')
+        app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite+{https_url}?authToken={turso_token}&secure=true"
     else:
         app.config['SQLALCHEMY_DATABASE_URI'] = turso_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
