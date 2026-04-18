@@ -200,6 +200,11 @@ def verify_signup():
         return jsonify({'error': str(e)}), 500
 
 
+@auth_bp.route('/api/auth/verify-otp', methods=['POST', 'OPTIONS'])
+def verify_otp():
+    return verify_signup()
+
+
 @auth_bp.route('/api/auth/login', methods=['POST', 'OPTIONS'])
 def login():
     if request.method == 'OPTIONS':
