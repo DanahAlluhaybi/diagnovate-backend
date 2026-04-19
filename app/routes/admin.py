@@ -305,3 +305,27 @@ def create_first_admin():
     db.session.add(admin)
     db.session.commit()
     return jsonify({'success': True, 'message': 'Admin created'})
+
+
+@admin_bp.route('/api/admin/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    try:
+        admin, err = get_admin_or_error()
+        if err:
+            return err
+        data = request.get_json(force=True, silent=True) or {}
+        current_password = data.get('current_password', '')
+        new_password = data.get('new_password', '')
+        if not current_password or not new_password:
+            return jsonify({'error': 'Current and new password are required'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        if not admin.check_password(current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        admin.set_password(new_password)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Password changed successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
