@@ -195,6 +195,13 @@ def login():
         if not doctor or not doctor.check_password(password):
             return jsonify({'error': 'البريد أو كلمة المرور غير صحيحة'}), 401
 
+        if doctor.status == 'pending_otp':
+            return jsonify({'error': 'Please complete phone verification first'}), 403
+        if doctor.status == 'pending':
+            return jsonify({'error': 'Your account is under review. You will be notified once approved by admin'}), 403
+        if doctor.status == 'rejected':
+            return jsonify({'error': 'Your registration was rejected. Please contact support'}), 403
+
         access_token = create_access_token(
             identity=str(doctor.id),
             expires_delta=timedelta(days=7)
