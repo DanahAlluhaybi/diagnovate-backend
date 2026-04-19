@@ -24,23 +24,18 @@ REJECTION_REASONS = [
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 def send_email(to_email: str, subject: str, body: str):
-    if not GMAIL_ADDRESS or not GMAIL_APP_PASS:
-        print("⚠️ Email not configured — skipping send")
-        return
     try:
-        msg            = MIMEMultipart()
-        msg['From']    = GMAIL_ADDRESS
-        msg['To']      = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASS)
-            server.sendmail(GMAIL_ADDRESS, to_email, msg.as_string())
-
+        import resend
+        resend.api_key = os.getenv("RESEND_API_KEY", "").strip()
+        resend.Emails.send({
+            "from": "noreply@diagnovate.org",
+            "to": to_email,
+            "subject": subject,
+            "html": f"<div style='font-family:Arial,sans-serif;padding:32px'>{body.replace(chr(10), '<br>')}</div>"
+        })
         print(f"📧 Email sent to {to_email}")
     except Exception as e:
-        print(f"⚠️ Failed to send email to {to_email}: {str(e)}")
+        print(f"⚠️ Failed to send email: {e}")
 
 
 def get_admin_or_error():
