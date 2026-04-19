@@ -99,8 +99,12 @@ def signup():
         if existing_phone:
             return jsonify({'error': 'Phone number is already registered'}), 400
 
-        Doctor.query.filter(Doctor.phone==phone, Doctor.status.in_(['pending_otp', 'rejected'])).delete(synchronize_session=False)
-        Doctor.query.filter(Doctor.email==email, Doctor.status.in_(['pending_otp', 'rejected'])).delete(synchronize_session=False)
+        rejected_doctors = Doctor.query.filter(
+            db.or_(Doctor.phone==phone, Doctor.email==email),
+            Doctor.status.in_(['pending_otp', 'rejected'])
+        ).all()
+        for d in rejected_doctors:
+            db.session.delete(d)
         db.session.commit()
         doctor = Doctor(name=name, email=email, phone=phone, specialty=specialty, status='pending_otp')
         doctor.password_hash = generate_password_hash(password)
