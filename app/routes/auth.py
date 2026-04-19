@@ -79,18 +79,25 @@ def signup():
         specialty = (data.get('specialty') or 'Thyroid Specialist').strip()
 
         if not name:
-            return jsonify({'error': 'الاسم مطلوب'}), 400
+            return jsonify({'error': 'Name is required'}), 400
         if not email or not validate_email(email):
-            return jsonify({'error': 'البريد الإلكتروني غير صحيح'}), 400
+            return jsonify({'error': 'Invalid email address'}), 400
         if not phone or not validate_phone(phone):
-            return jsonify({'error': 'رقم الهاتف غير صحيح، استخدم +966XXXXXXXXX أو 05XXXXXXXX'}), 400
+            return jsonify({'error': 'Invalid phone number, use +966XXXXXXXXX or 05XXXXXXXX'}), 400
         if not password or len(password) < 6:
-            return jsonify({'error': 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'}), 400
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
 
-        if Doctor.query.filter_by(email=email).first():
-            return jsonify({'error': 'البريد الإلكتروني مسجل مسبقاً'}), 400
-        if Doctor.query.filter_by(phone=phone).first():
-            return jsonify({'error': 'رقم الهاتف مسجل مسبقاً'}), 400
+        existing_email = Doctor.query.filter_by(email=email).filter(
+            Doctor.status.notin_(['pending_otp', 'rejected'])
+        ).first()
+        if existing_email:
+            return jsonify({'error': 'Email is already registered'}), 400
+
+        existing_phone = Doctor.query.filter_by(phone=phone).filter(
+            Doctor.status.notin_(['pending_otp', 'rejected'])
+        ).first()
+        if existing_phone:
+            return jsonify({'error': 'Phone number is already registered'}), 400
 
         Doctor.query.filter_by(phone=phone, status='pending_otp').delete()
         Doctor.query.filter_by(email=email, status='pending_otp').delete()
@@ -189,11 +196,11 @@ def login():
         password   = (data.get('password') or '').strip()
 
         if not identifier or not password:
-            return jsonify({'error': 'البريد وكلمة المرور مطلوبان'}), 400
+            return jsonify({'error': 'Email and password are required'}), 400
 
         doctor = Doctor.query.filter_by(email=identifier).first()
         if not doctor or not doctor.check_password(password):
-            return jsonify({'error': 'البريد أو كلمة المرور غير صحيحة'}), 401
+            return jsonify({'error': 'Invalid email or password'}), 401
 
         if doctor.status == 'pending_otp':
             return jsonify({'error': 'Please complete phone verification first'}), 403
