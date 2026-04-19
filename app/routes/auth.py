@@ -87,6 +87,14 @@ def signup():
         if not password or len(password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
 
+        rejected = Doctor.query.filter(
+            db.or_(Doctor.email==email, Doctor.phone==phone),
+            Doctor.status.in_(['rejected', 'pending_otp'])
+        ).all()
+        for d in rejected:
+            db.session.delete(d)
+        db.session.commit()
+
         existing_email = Doctor.query.filter_by(email=email).filter(
             Doctor.status.notin_(['pending_otp', 'rejected'])
         ).first()
