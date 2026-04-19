@@ -101,6 +101,8 @@ def signup():
 
         Doctor.query.filter_by(phone=phone, status='pending_otp').delete()
         Doctor.query.filter_by(email=email, status='pending_otp').delete()
+        Doctor.query.filter_by(email=email, status='rejected').delete()
+        Doctor.query.filter_by(phone=phone, status='rejected').delete()
         db.session.commit()
         doctor = Doctor(name=name, email=email, phone=phone, specialty=specialty, status='pending_otp')
         doctor.password_hash = generate_password_hash(password)
