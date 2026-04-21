@@ -117,7 +117,50 @@ def apply_sharpening(img: Image.Image) -> Image.Image:
     return Image.fromarray(np.clip(sharpened, 0, 255).astype(np.uint8))
 
 
-def full_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
+def ultrasound_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
+    arr  = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
+
+    # Denoise
+    denoised = cv2.fastNlMeansDenoising(arr, None, h=2,
+                                         templateWindowSize=7, searchWindowSize=21)
+
+    # Morphological open+close blend
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    opened = cv2.morphologyEx(denoised, cv2.MORPH_OPEN,  kernel)
+    closed = cv2.morphologyEx(opened,   cv2.MORPH_CLOSE, kernel)
+    blended = cv2.addWeighted(denoised, 0.75, closed, 0.25, 0)
+
+    # CLAHE
+    clahe   = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    equalized = clahe.apply(blended)
+
+    # Bilateral smooth
+    bilateral = cv2.bilateralFilter(equalized, d=5, sigmaColor=25, sigmaSpace=25)
+
+    # Unsharp mask
+    gauss     = cv2.GaussianBlur(bilateral.astype(np.float32), (0, 0), sigmaX=1.0)
+    sharpened = cv2.addWeighted(bilateral.astype(np.float32), 1.2, gauss, -0.2, 0)
+    sharpened = np.clip(sharpened, 0, 255).astype(np.uint8)
+
+    # Gamma 1.08 LUT
+    table = np.array([((i / 255.0) ** (1 / 1.08)) * 255
+                      for i in range(256)]).astype(np.uint8)
+    gamma_corrected = cv2.LUT(sharpened, table)
+
+    # Lanczos x4
+    rgb = cv2.cvtColor(gamma_corrected, cv2.COLOR_GRAY2RGB)
+    out = Image.fromarray(rgb)
+    w, h = out.size
+    out = out.resize((w * 4, h * 4), Image.LANCZOS)
+
+    return out, "Denoise → Morph blend → CLAHE → Bilateral → Unsharp → Gamma → Lanczos x4"
+
+
+def full_pipeline(img: Image.Image, image_type: str = 'auto') -> tuple[Image.Image, str]:
+    if image_type == 'ultrasound':
+        return ultrasound_pipeline(img)
+
+    # ct or auto: existing RealESRGAN pipeline
     img   = apply_denoising(img)
     model = get_sr_model()
 
@@ -155,8 +198,9 @@ def enhance_image():
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided. Send as multipart/form-data with key "image"'}), 400
 
-    file    = request.files['image']
-    case_id = request.form.get('case_id')
+    file       = request.files['image']
+    case_id    = request.form.get('case_id')
+    image_type = request.form.get('image_type', 'auto')
     if not file or file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
@@ -183,7 +227,7 @@ def enhance_image():
     orig_w, orig_h = img.size
 
     try:
-        enhanced_img, method_used = full_pipeline(img)
+        enhanced_img, method_used = full_pipeline(img, image_type)
     except Exception as e:
         print(f"❌ Enhancement pipeline failed: {e}")
         return jsonify({'error': f'Enhancement failed: {str(e)}'}), 500
