@@ -2,10 +2,12 @@ import io
 import base64
 import numpy as np
 import cv2
+from datetime import datetime
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from PIL import Image
 import os
+from app.models import db, Case
 
 enhancement_bp = Blueprint('enhancement', __name__)
 
@@ -152,7 +154,8 @@ def enhance_image():
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided. Send as multipart/form-data with key "image"'}), 400
 
-    file = request.files['image']
+    file    = request.files['image']
+    case_id = request.form.get('case_id')
     if not file or file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
@@ -187,11 +190,21 @@ def enhance_image():
     enhanced_b64 = img_to_b64(enhanced_img)
     enh_w, enh_h = enhanced_img.size
 
+    db_saved = False
+    if case_id:
+        case = Case.query.filter_by(case_id=case_id).first()
+        if case:
+            case.enhanced_image_path = f'data:image/png;base64,{enhanced_b64}'
+            case.updated_at = datetime.utcnow()
+            db.session.commit()
+            db_saved = True
+
     return jsonify({
         'success':  True,
         'method':   method_used,
         'original': f'data:image/png;base64,{original_b64}',
         'enhanced': f'data:image/png;base64,{enhanced_b64}',
+        'db_saved': db_saved,
         'stats': {
             'original_size': f'{orig_w}x{orig_h}',
             'enhanced_size': f'{enh_w}x{enh_h}',
