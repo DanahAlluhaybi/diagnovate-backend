@@ -2,23 +2,23 @@ import os
 import joblib
 import numpy as np
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'thyroid_model.pkl')
+MODEL_PATH    = os.path.join(os.path.dirname(__file__), 'thyroid_model.pkl')
 FEATURES_PATH = os.path.join(os.path.dirname(__file__), 'feature_columns.pkl')
-ENCODERS_PATH = os.path.join(os.path.dirname(__file__), 'label_encoders.pkl')
+IMPUTER_PATH  = os.path.join(os.path.dirname(__file__), 'imputer.pkl')
 
-model = None
+model           = None
 feature_columns = None
-label_encoders = None
+imputer         = None
 
 def load_ml_artifacts():
-    global model, feature_columns, label_encoders
+    global model, feature_columns, imputer
     try:
-        model = joblib.load(MODEL_PATH)
+        model           = joblib.load(MODEL_PATH)
         feature_columns = joblib.load(FEATURES_PATH)
-        label_encoders = joblib.load(ENCODERS_PATH)
-        print("✅ ML artifacts loaded successfully")
-        print(f"   Features: {len(feature_columns)} columns")
-        print(f"   Encoders: {list(label_encoders.keys())}")
+        imputer         = joblib.load(IMPUTER_PATH)
+        print("ML artifacts loaded successfully")
+        print(f"   Features : {len(feature_columns)} columns")
+        print(f"   Features : {feature_columns}")
     except Exception as e:
-        print(f"❌ Error loading ML artifacts: {e}")
+        print(f" Error loading ML artifacts: {e}")
         raise
