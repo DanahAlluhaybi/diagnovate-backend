@@ -1,5 +1,6 @@
 import io
 import base64
+import urllib.request
 import numpy as np
 import cv2
 from datetime import datetime
@@ -7,6 +8,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from PIL import Image
 import os
+import replicate
 from app.models import db, Case
 from app.utils.storage import upload_image
 
@@ -117,25 +119,55 @@ def apply_sharpening(img: Image.Image) -> Image.Image:
     return Image.fromarray(np.clip(sharpened, 0, 255).astype(np.uint8))
 
 
+def run_replicate_upscale(image_bytes: bytes) -> bytes:
+    b64 = base64.b64encode(image_bytes).decode('utf-8')
+    data_url = f'data:image/png;base64,{b64}'
+    output = replicate.run(
+        "nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
+        input={"image": data_url, "scale": 4}
+    )
+    url = output if isinstance(output, str) else output[0]
+    with urllib.request.urlopen(url) as resp:
+        return resp.read()
+
+
 def ultrasound_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
-    arr  = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
+    arr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
 
     # Denoise
     denoised = cv2.fastNlMeansDenoising(arr, None, h=2,
                                          templateWindowSize=7, searchWindowSize=21)
 
     # Morphological open+close blend
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
-    opened = cv2.morphologyEx(denoised, cv2.MORPH_OPEN,  kernel)
-    closed = cv2.morphologyEx(opened,   cv2.MORPH_CLOSE, kernel)
+    kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    opened  = cv2.morphologyEx(denoised, cv2.MORPH_OPEN,  kernel)
+    closed  = cv2.morphologyEx(opened,   cv2.MORPH_CLOSE, kernel)
     blended = cv2.addWeighted(denoised, 0.75, closed, 0.25, 0)
 
     # CLAHE
-    clahe   = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    clahe     = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
     equalized = clahe.apply(blended)
 
+    # Convert to RGB for Replicate upscale
+    pre_upscale = Image.fromarray(cv2.cvtColor(equalized, cv2.COLOR_GRAY2RGB))
+
+    try:
+        buf = io.BytesIO()
+        pre_upscale.save(buf, format='PNG')
+        upscaled_bytes = run_replicate_upscale(buf.getvalue())
+        upscaled = Image.open(io.BytesIO(upscaled_bytes)).convert('RGB')
+        sr_method = "Replicate Real-ESRGAN x4"
+    except Exception as e:
+        print(f"⚠️ Replicate upscale failed: {e} — using Lanczos fallback")
+        w, h = pre_upscale.size
+        upscaled = pre_upscale.resize((w * 4, h * 4), Image.LANCZOS)
+        sr_method = "Lanczos x4 (fallback)"
+
+    # Back to grayscale for remaining steps
+    arr = cv2.cvtColor(np.array(upscaled), cv2.COLOR_RGB2GRAY)
+
     # Bilateral smooth
-    bilateral = cv2.bilateralFilter(equalized, d=5, sigmaColor=25, sigmaSpace=25)
+    bilateral = cv2.bilateralFilter(arr, d=5, sigmaColor=25, sigmaSpace=25)
 
     # Unsharp mask
     gauss     = cv2.GaussianBlur(bilateral.astype(np.float32), (0, 0), sigmaX=1.0)
@@ -147,34 +179,37 @@ def ultrasound_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
                       for i in range(256)]).astype(np.uint8)
     gamma_corrected = cv2.LUT(sharpened, table)
 
-    # Lanczos x4
-    rgb = cv2.cvtColor(gamma_corrected, cv2.COLOR_GRAY2RGB)
-    out = Image.fromarray(rgb)
-    w, h = out.size
-    out = out.resize((w * 4, h * 4), Image.LANCZOS)
-
-    return out, "Denoise → Morph blend → CLAHE → Bilateral → Unsharp → Gamma → Lanczos x4"
+    out = Image.fromarray(cv2.cvtColor(gamma_corrected, cv2.COLOR_GRAY2RGB))
+    return out, f"Denoise → Morph blend → CLAHE → {sr_method} → Bilateral → Unsharp → Gamma"
 
 
 def full_pipeline(img: Image.Image, image_type: str = 'auto') -> tuple[Image.Image, str]:
     if image_type == 'ultrasound':
         return ultrasound_pipeline(img)
 
-    # ct or auto: existing RealESRGAN pipeline
-    img   = apply_denoising(img)
-    model = get_sr_model()
+    # ct or auto: denoise → Replicate upscale → CLAHE → sharpening
+    img = apply_denoising(img)
 
-    if model is not None:
-        try:
-            img       = apply_realesrgan(img, model)
-            sr_method = "RealESRGAN x4v3"
-        except Exception as e:
-            print(f"⚠️ RealESRGAN inference failed: {e}")
+    try:
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        upscaled_bytes = run_replicate_upscale(buf.getvalue())
+        img       = Image.open(io.BytesIO(upscaled_bytes)).convert('RGB')
+        sr_method = "Replicate Real-ESRGAN x4"
+    except Exception as e:
+        print(f"⚠️ Replicate upscale failed: {e} — falling back to local pipeline")
+        model = get_sr_model()
+        if model is not None:
+            try:
+                img       = apply_realesrgan(img, model)
+                sr_method = "RealESRGAN x4v3 (local fallback)"
+            except Exception as e2:
+                print(f"⚠️ Local RealESRGAN failed: {e2} — using Lanczos")
+                img       = apply_lanczos(img)
+                sr_method = "Lanczos x4 (fallback)"
+        else:
             img       = apply_lanczos(img)
             sr_method = "Lanczos x4 (fallback)"
-    else:
-        img       = apply_lanczos(img)
-        sr_method = "Lanczos x4"
 
     img = apply_clahe(img)
     img = apply_sharpening(img)
