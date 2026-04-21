@@ -123,8 +123,15 @@ def run_replicate_upscale(image_bytes: bytes) -> bytes:
     b64 = base64.b64encode(image_bytes).decode('utf-8')
     data_url = f'data:image/png;base64,{b64}'
     output = replicate.run(
-        "nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
-        input={"image": data_url, "scale": 4}
+        "philz1337x/clarity-upscaler:9d74f57c1b6f406f3b48ae15ef6e8af22a0c4c3a1e756f73624b4cd7c32cb01",
+        input={
+            "image":        data_url,
+            "scale_factor": 4,
+            "resemblance":  0.6,
+            "creativity":   0.35,
+            "dynamic":      6,
+            "sharpen":      2,
+        }
     )
     url = output if isinstance(output, str) else output[0]
     with urllib.request.urlopen(url) as resp:
@@ -156,7 +163,7 @@ def ultrasound_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
         pre_upscale.save(buf, format='PNG')
         upscaled_bytes = run_replicate_upscale(buf.getvalue())
         upscaled = Image.open(io.BytesIO(upscaled_bytes)).convert('RGB')
-        sr_method = "Replicate Real-ESRGAN x4"
+        sr_method = "Replicate Clarity Upscaler x4"
     except Exception as e:
         print(f"⚠️ Replicate upscale failed: {e} — using Lanczos fallback")
         w, h = pre_upscale.size
@@ -195,7 +202,7 @@ def full_pipeline(img: Image.Image, image_type: str = 'auto') -> tuple[Image.Ima
         img.save(buf, format='PNG')
         upscaled_bytes = run_replicate_upscale(buf.getvalue())
         img       = Image.open(io.BytesIO(upscaled_bytes)).convert('RGB')
-        sr_method = "Replicate Real-ESRGAN x4"
+        sr_method = "Replicate Clarity Upscaler x4"
     except Exception as e:
         print(f"⚠️ Replicate upscale failed: {e} — falling back to local pipeline")
         model = get_sr_model()
