@@ -8,6 +8,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from PIL import Image
 import os
 from app.models import db, Case
+from app.utils.storage import upload_image
 
 enhancement_bp = Blueprint('enhancement', __name__)
 
@@ -194,7 +195,11 @@ def enhance_image():
     if case_id:
         case = Case.query.filter_by(case_id=case_id).first()
         if case:
-            case.enhanced_image_path = f'data:image/png;base64,{enhanced_b64}'
+            buf = io.BytesIO()
+            enhanced_img.save(buf, format='PNG')
+            buf.seek(0)
+            cloudinary_url = upload_image(buf)
+            case.enhanced_image_path = cloudinary_url
             case.updated_at = datetime.utcnow()
             db.session.commit()
             db_saved = True
