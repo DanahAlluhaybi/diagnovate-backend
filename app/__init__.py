@@ -18,7 +18,7 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY']                 = os.getenv('JWT_SECRET_KEY', 'super-secret-key')
     app.config['SECRET_KEY']                     = os.getenv('SECRET_KEY', 'secret-key')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES']       = timedelta(days=7)
+    app.config['JWT_ACCESS_TOKEN_EXPIRES']       = timedelta(minutes=30)
     app.config['MAX_CONTENT_LENGTH']             = 16 * 1024 * 1024
 
     CORS(app, resources={r"/api/*": {

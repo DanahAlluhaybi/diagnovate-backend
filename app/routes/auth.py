@@ -1,10 +1,13 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
 from app.models import db, Doctor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from twilio.rest import Client
 import os, re, resend
 from werkzeug.security import generate_password_hash
+
+LOCKOUT_MAX_ATTEMPTS = 5
+LOCKOUT_DURATION     = timedelta(minutes=30)
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -211,7 +214,27 @@ def login():
             return jsonify({'error': 'Email and password are required'}), 400
 
         doctor = Doctor.query.filter_by(email=identifier).first()
+
+        if doctor and doctor.locked_until and doctor.locked_until > datetime.utcnow():
+            remaining = int((doctor.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+            return jsonify({
+                'error': f'Account locked due to too many failed attempts. Try again in {remaining} minute(s).'
+            }), 429
+
         if not doctor or not doctor.check_password(password):
+            if doctor:
+                doctor.failed_attempts = (doctor.failed_attempts or 0) + 1
+                if doctor.failed_attempts >= LOCKOUT_MAX_ATTEMPTS:
+                    doctor.locked_until = datetime.utcnow() + LOCKOUT_DURATION
+                    db.session.commit()
+                    return jsonify({
+                        'error': f'Account locked after {LOCKOUT_MAX_ATTEMPTS} failed attempts. Try again in 30 minutes.'
+                    }), 429
+                db.session.commit()
+                remaining_attempts = LOCKOUT_MAX_ATTEMPTS - doctor.failed_attempts
+                return jsonify({
+                    'error': f'Invalid email or password. {remaining_attempts} attempt(s) remaining before lockout.'
+                }), 401
             return jsonify({'error': 'Invalid email or password'}), 401
 
         if doctor.status == 'pending_otp':
@@ -221,10 +244,13 @@ def login():
         if doctor.status == 'rejected':
             return jsonify({'error': 'Your registration was rejected. Please contact support'}), 403
 
-        access_token = create_access_token(
-            identity=str(doctor.id),
-            expires_delta=timedelta(days=7)
-        )
+        doctor.failed_attempts = 0
+        doctor.locked_until    = None
+        doctor.last_login      = datetime.utcnow()
+        doctor.last_ip         = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+        db.session.commit()
+
+        access_token = create_access_token(identity=str(doctor.id))
         return jsonify({
             'success': True,
             'access_token': access_token,

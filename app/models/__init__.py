@@ -34,15 +34,19 @@ class Admin(db.Model):
 class Doctor(db.Model):
     __tablename__ = 'doctors'
 
-    id             = db.Column(db.Integer, primary_key=True)
-    name           = db.Column(db.String(100), nullable=False)
-    email          = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash  = db.Column(db.String(200), nullable=False)
-    specialty      = db.Column(db.String(100), default='Thyroid Specialist')
-    phone          = db.Column(db.String(20))
-    license_number = db.Column(db.String(50))
-    status         = db.Column(db.String(20), default='pending')
-    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(100), nullable=False)
+    email           = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash   = db.Column(db.String(200), nullable=False)
+    specialty       = db.Column(db.String(100), default='Thyroid Specialist')
+    phone           = db.Column(db.String(20))
+    license_number  = db.Column(db.String(50))
+    status          = db.Column(db.String(20), default='pending')
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    failed_attempts = db.Column(db.Integer, default=0, nullable=False)
+    locked_until    = db.Column(db.DateTime, nullable=True)
+    last_login      = db.Column(db.DateTime, nullable=True)
+    last_ip         = db.Column(db.String(45), nullable=True)
 
     patients = db.relationship('Patient', backref='doctor', lazy=True, cascade='all, delete-orphan')
     cases    = db.relationship('Case', backref='doctor', lazy=True, cascade='all, delete-orphan')
