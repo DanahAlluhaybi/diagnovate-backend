@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Doctor, Admin
@@ -7,15 +6,13 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import traceback
+import os
 
 admin_bp = Blueprint('admin', __name__)
 
-
-
-
-GMAIL_ADDRESS  = "your_project_email@gmail.com"   # ← إيميل المشروع
-GMAIL_APP_PASS = "xxxx xxxx xxxx xxxx"             # ← الـ App Password
-# ────────────────────────────────────────────────────────────
+# ✅ FIX: load from .env instead of hardcoding
+GMAIL_ADDRESS  = os.getenv("GMAIL_ADDRESS", "")
+GMAIL_APP_PASS = os.getenv("GMAIL_APP_PASS", "")
 
 REJECTION_REASONS = [
     "The provided information is incorrect or incomplete.",
@@ -25,50 +22,78 @@ REJECTION_REASONS = [
 ]
 
 
-# ── Helper
+# ── Helpers ───────────────────────────────────────────────────────────────
 def send_email(to_email: str, subject: str, body: str):
     try:
-        msg = MIMEMultipart()
-        msg['From']    = GMAIL_ADDRESS
-        msg['To']      = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASS)
-            server.sendmail(GMAIL_ADDRESS, to_email, msg.as_string())
-
-        print(f"📧 Email sent to {to_email}: {subject}")
+        import resend
+        resend.api_key = os.getenv("RESEND_API_KEY", "").strip()
+        resend.Emails.send({
+            "from": "noreply@diagnovate.org",
+            "to": to_email,
+            "subject": subject,
+            "html": f"<div style='font-family:Arial,sans-serif;padding:32px'>{body.replace(chr(10), '<br>')}</div>"
+        })
+        print(f"📧 Email sent to {to_email}")
     except Exception as e:
-        print(f"⚠️ Failed to send email to {to_email}: {str(e)}")
-
+        print(f"⚠️ Failed to send email: {e}")
 
 
 def get_admin_or_error():
     try:
         admin_id = get_jwt_identity()
-        admin    = Admin.query.get(int(admin_id))
-
+        # ✅ FIX: check if it's an admin or a doctor calling admin endpoints
+        admin = Admin.query.get(int(admin_id))
         if not admin:
-            return None, (jsonify({'error': 'Admin not found'}), 404)
-
+            return None, (jsonify({'error': 'Admin not found or unauthorized'}), 403)
         return admin, None
     except Exception as e:
         traceback.print_exc()
         return None, (jsonify({'error': str(e)}), 500)
 
 
-# ── REJECTION REASONS ────────────────────────────────────────
+# ── Admin Login ───────────────────────────────────────────────────────────
+@admin_bp.route('/api/admin/login', methods=['POST', 'OPTIONS'])
+def admin_login():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    try:
+        from flask_jwt_extended import create_access_token
+        from datetime import timedelta
+
+        data     = request.get_json(force=True, silent=True)
+        email    = data.get('email', '').strip().lower()
+        password = data.get('password', '').strip()
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        admin = Admin.query.filter_by(email=email).first()
+        if not admin or not admin.check_password(password):
+            return jsonify({'error': 'Invalid admin credentials'}), 401
+
+        access_token = create_access_token(
+            identity=str(admin.id),
+            expires_delta=timedelta(days=1)
+        )
+        return jsonify({
+            'success':      True,
+            'access_token': access_token,
+            'admin':        admin.to_dict()
+        }), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Rejection Reasons ─────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/rejection-reasons', methods=['GET'])
 @jwt_required()
 def get_rejection_reasons():
-    admin, err = get_admin_or_error()
-    if err:
-        return err
     return jsonify(REJECTION_REASONS)
 
 
-# ── STATS ────────────────────────────────────────────────────
+# ── Stats ─────────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/stats', methods=['GET'])
 @jwt_required()
 def get_stats():
@@ -78,27 +103,21 @@ def get_stats():
             return err
 
         today = date.today()
-
-        total_users       = Doctor.query.count()
-        pending_approvals = Doctor.query.filter_by(status='pending').count()
-        active_users      = Doctor.query.filter_by(status='active').count()
-        rejected_today    = Doctor.query.filter(
-            Doctor.status == 'rejected',
-            db.func.date(Doctor.created_at) == today
-        ).count()
-
         return jsonify({
-            'total_users': total_users,
-            'pending_approvals': pending_approvals,
-            'active_users': active_users,
-            'rejected_today': rejected_today,
+            'total_users':       Doctor.query.count(),
+            'pending_approvals': Doctor.query.filter_by(status='pending').count(),
+            'active_users':      Doctor.query.filter_by(status='active').count(),
+            'rejected_today':    Doctor.query.filter(
+                Doctor.status == 'rejected',
+                db.func.date(Doctor.created_at) == today
+            ).count(),
         })
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
-# ── PENDING USERS ────────────────────────────────────────────
+# ── Pending Users ─────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/pending-users', methods=['GET'])
 @jwt_required()
 def get_pending():
@@ -107,29 +126,22 @@ def get_pending():
         if err:
             return err
 
-        users  = Doctor.query.filter_by(status='pending').all()
-        result = []
-        for u in users:
-            result.append({
-                'id': u.id,
-                'full_name': u.name,
-                'email': u.email,
-                'mobile': u.phone or '',
-                'institution': '',
-                'license_number': u.license_number or '',
-                'specialty': u.specialty or 'Thyroid Specialist',
-                'registered_at': u.created_at.isoformat() if u.created_at else '',
-                'email_verified': True,
-                'sms_verified': True,
-            })
-
-        return jsonify(result)
+        users = Doctor.query.filter_by(status='pending').all()
+        return jsonify([{
+            'id':             u.id,
+            'full_name':      u.name,
+            'email':          u.email,
+            'mobile':         u.phone or '',
+            'license_number': u.license_number or '',
+            'specialty':      u.specialty or 'Thyroid Specialist',
+            'registered_at':  u.created_at.isoformat() if u.created_at else '',
+        } for u in users])
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
-# ── ACTIVE / INACTIVE USERS ──────────────────────────────────
+# ── Active Users ──────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/active-users', methods=['GET'])
 @jwt_required()
 def get_active():
@@ -138,30 +150,21 @@ def get_active():
         if err:
             return err
 
-        users = Doctor.query.filter(
-            Doctor.status.in_(['active', 'inactive'])
-        ).all()
-
-        result = []
-        for u in users:
-            result.append({
-                'id': u.id,
-                'full_name': u.name,
-                'email': u.email,
-                'institution': '',
-                'specialty': u.specialty or 'Thyroid Specialist',
-                'status': u.status,
-                'last_login': u.created_at.isoformat() if u.created_at else '',
-                'created_at': u.created_at.isoformat() if u.created_at else '',
-            })
-
-        return jsonify(result)
+        users = Doctor.query.filter(Doctor.status.in_(['active', 'inactive'])).all()
+        return jsonify([{
+            'id':         u.id,
+            'full_name':  u.name,
+            'email':      u.email,
+            'specialty':  u.specialty or 'Thyroid Specialist',
+            'status':     u.status,
+            'created_at': u.created_at.isoformat() if u.created_at else '',
+        } for u in users])
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
-# ── APPROVE ──────────────────────────────────────────────────
+# ── Approve ───────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/approve/<int:user_id>', methods=['POST'])
 @jwt_required()
 def approve(user_id):
@@ -170,7 +173,7 @@ def approve(user_id):
         if err:
             return err
 
-        user        = Doctor.query.get_or_404(user_id)
+        user = Doctor.query.get_or_404(user_id)
         user.status = 'active'
         db.session.commit()
 
@@ -179,15 +182,12 @@ def approve(user_id):
             subject="Welcome to Diagnovate!",
             body=(
                 f"Dear Dr. {user.name},\n\n"
-                f"We are delighted to inform you that your account on Diagnovate "
-                f"has been approved!\n\n"
+                f"Your Diagnovate account has been approved!\n"
                 f"You can now log in and start using the platform.\n\n"
-                f"Welcome aboard, and we look forward to supporting your work.\n\n"
                 f"Best regards,\nDiagnovate Admin Team"
             )
         )
 
-        print(f"✅ Approved: {user.name} (ID: {user_id})")
         return jsonify({'success': True, 'message': f'{user.name} approved successfully'})
     except Exception as e:
         db.session.rollback()
@@ -195,7 +195,7 @@ def approve(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── REJECT ───────────────────────────────────────────────────
+# ── Reject ────────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/reject/<int:user_id>', methods=['POST'])
 @jwt_required()
 def reject(user_id):
@@ -206,11 +206,8 @@ def reject(user_id):
 
         data   = request.get_json() or {}
         reason = data.get('reason', '').strip()
-
         if reason == 'Other':
-            custom = data.get('custom_reason', '').strip()
-            reason = custom if custom else 'No reason provided'
-
+            reason = data.get('custom_reason', '').strip() or 'No reason provided'
         if not reason:
             return jsonify({'error': 'Rejection reason is required'}), 400
 
@@ -220,20 +217,17 @@ def reject(user_id):
 
         send_email(
             to_email=user.email,
-            subject="Diagnovate - Registration Update",
+            subject="Diagnovate – Registration Update",
             body=(
                 f"Dear Dr. {user.name},\n\n"
-                f"Thank you for your interest in joining Diagnovate.\n\n"
-                f"After reviewing your registration, we regret to inform you "
-                f"that your request has not been approved at this time.\n\n"
+                f"Thank you for your interest in Diagnovate.\n"
+                f"Unfortunately, your registration was not approved.\n\n"
                 f"Reason: {reason}\n\n"
-                f"If you believe this is an error or have any questions, "
-                f"please contact our support team.\n\n"
+                f"If you have questions, please contact support.\n\n"
                 f"Best regards,\nDiagnovate Admin Team"
             )
         )
 
-        print(f"❌ Rejected: {user.name} (ID: {user_id}), reason: {reason}")
         return jsonify({'success': True, 'message': f'{user.name} rejected', 'reason': reason})
     except Exception as e:
         db.session.rollback()
@@ -241,7 +235,7 @@ def reject(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── ACTIVATE ─────
+# ── Activate ──────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/activate/<int:user_id>', methods=['POST'])
 @jwt_required()
 def activate(user_id):
@@ -249,12 +243,9 @@ def activate(user_id):
         admin, err = get_admin_or_error()
         if err:
             return err
-
         user        = Doctor.query.get_or_404(user_id)
         user.status = 'active'
         db.session.commit()
-
-        print(f"✅ Activated: {user.name} (ID: {user_id})")
         return jsonify({'success': True, 'message': f'{user.name} activated'})
     except Exception as e:
         db.session.rollback()
@@ -262,7 +253,7 @@ def activate(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-
+# ── Deactivate ────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/deactivate/<int:user_id>', methods=['POST'])
 @jwt_required()
 def deactivate(user_id):
@@ -270,12 +261,9 @@ def deactivate(user_id):
         admin, err = get_admin_or_error()
         if err:
             return err
-
         user        = Doctor.query.get_or_404(user_id)
         user.status = 'inactive'
         db.session.commit()
-
-        print(f"⚠️ Deactivated: {user.name} (ID: {user_id})")
         return jsonify({'success': True, 'message': f'{user.name} deactivated'})
     except Exception as e:
         db.session.rollback()
@@ -283,7 +271,7 @@ def deactivate(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── DEBUG: ALL DOCTORS ───────────────────────────────────────
+# ── Debug: All Doctors ────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/debug/doctors', methods=['GET'])
 @jwt_required()
 def debug_doctors():
@@ -291,25 +279,11 @@ def debug_doctors():
         admin, err = get_admin_or_error()
         if err:
             return err
-
         doctors = Doctor.query.all()
-        result  = [
-            {
-                'id': d.id,
-                'name': d.name,
-                'email': d.email,
-                'status': d.status,
-                'phone': d.phone,
-                'license_number': d.license_number,
-                'created_at': str(d.created_at) if d.created_at else None
-            }
-            for d in doctors
-        ]
-
         return jsonify({
-            'total': len(result),
-            'doctors': result,
-            'stats': {
+            'total':   len(doctors),
+            'doctors': [d.to_dict() for d in doctors],
+            'stats':   {
                 'pending':  Doctor.query.filter_by(status='pending').count(),
                 'active':   Doctor.query.filter_by(status='active').count(),
                 'inactive': Doctor.query.filter_by(status='inactive').count(),
@@ -321,35 +295,37 @@ def debug_doctors():
         return jsonify({'error': str(e)}), 500
 
 
-# ── DEBUG: CHECK DB ──────────────────────────────────────────
-@admin_bp.route('/api/admin/debug/check-db', methods=['GET'])
-def check_db_public():
+@admin_bp.route('/api/admin/create-first-admin', methods=['POST'])
+def create_first_admin():
+    from app.models import Admin
+    if Admin.query.count() > 0:
+        return jsonify({'error': 'Admin already exists'}), 400
+    admin = Admin(name="Admin", email="admin@diagnovate.org")
+    admin.set_password("Admin@1234")
+    db.session.add(admin)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Admin created'})
+
+
+@admin_bp.route('/api/admin/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
     try:
-        from app import app
-        import os
-
-        db_uri  = app.config['SQLALCHEMY_DATABASE_URI']
-        db_path = db_uri.replace('sqlite:///', '')
-
-        if not os.path.isabs(db_path):
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            db_path  = os.path.join(base_dir, db_path)
-
-        file_exists  = os.path.exists(db_path)
-        file_size    = os.path.getsize(db_path) if file_exists else 0
-        doctor_count = Doctor.query.count()
-        admin_count  = Admin.query.count()
-
-        return jsonify({
-            'database_uri': db_uri,
-            'database_path': db_path,
-            'file_exists': file_exists,
-            'file_size_bytes': file_size,
-            'file_size_kb': round(file_size / 1024, 2) if file_exists else 0,
-            'total_doctors': doctor_count,
-            'total_admins': admin_count,
-            'timestamp': str(datetime.now())
-        })
+        admin, err = get_admin_or_error()
+        if err:
+            return err
+        data = request.get_json(force=True, silent=True) or {}
+        current_password = data.get('current_password', '')
+        new_password = data.get('new_password', '')
+        if not current_password or not new_password:
+            return jsonify({'error': 'Current and new password are required'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        if not admin.check_password(current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        admin.set_password(new_password)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Password changed successfully'}), 200
     except Exception as e:
-        traceback.print_exc()
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500

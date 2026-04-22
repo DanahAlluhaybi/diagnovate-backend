@@ -5,15 +5,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 db = SQLAlchemy()
 
 
-# ── Admin ──────────────────
+# ── Admin ──────────────────────────────────────────────────────────────────
 class Admin(db.Model):
     __tablename__ = 'admins'
 
-    id         = db.Column(db.Integer, primary_key=True)
-    name       = db.Column(db.String(100), nullable=False)
-    email      = db.Column(db.String(100), unique=True, nullable=False)
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(100), nullable=False)
+    email         = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -30,23 +30,22 @@ class Admin(db.Model):
         }
 
 
-# ── Doctor ───────────────────────────────────────────────────
+# ── Doctor ─────────────────────────────────────────────────────────────────
 class Doctor(db.Model):
     __tablename__ = 'doctors'
 
-    id            = db.Column(db.Integer, primary_key=True)
-    name          = db.Column(db.String(100), nullable=False)
-    email         = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)
-    specialty     = db.Column(db.String(100), default='Thyroid Specialist')
-    phone         = db.Column(db.String(20))
-    license_number= db.Column(db.String(50))
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    status        = db.Column(db.String(20), default='pending')
+    id             = db.Column(db.Integer, primary_key=True)
+    name           = db.Column(db.String(100), nullable=False)
+    email          = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash  = db.Column(db.String(200), nullable=False)
+    specialty      = db.Column(db.String(100), default='Thyroid Specialist')
+    phone          = db.Column(db.String(20))
+    license_number = db.Column(db.String(50))
+    status         = db.Column(db.String(20), default='pending')
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
-    relationships = db.relationship('Patient', backref='doctor', lazy=True, cascade='all, delete-orphan')
-    cases         = db.relationship('Case', backref='doctor', lazy=True, cascade='all, delete-orphan')
-    appointments  = db.relationship('Appointment', backref='doctor', lazy=True, cascade='all, delete-orphan')
+    patients = db.relationship('Patient', backref='doctor', lazy=True, cascade='all, delete-orphan')
+    cases    = db.relationship('Case', backref='doctor', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -62,80 +61,84 @@ class Doctor(db.Model):
             'specialty':      self.specialty,
             'phone':          self.phone,
             'license_number': self.license_number,
-            'created_at':     self.created_at.isoformat() if self.created_at else None,
             'status':         self.status,
+            'created_at':     self.created_at.isoformat() if self.created_at else None,
         }
 
 
-#1
+# ── Patient ────────────────────────────────────────────────────────────────
 class Patient(db.Model):
     __tablename__ = 'patients'
 
     id         = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.String(50), unique=True, nullable=False)
-    mrn        = db.Column(db.String(50), unique=True, nullable=False)
+    mrn        = db.Column(db.String(50), unique=True, nullable=True)
     first_name = db.Column(db.String(100), nullable=False)
-    last_name  = db.Column(db.String(100), nullable=False)
-    age        = db.Column(db.Integer, nullable=False)
-    gender     = db.Column(db.String(10), nullable=False)
-    phone      = db.Column(db.String(20), nullable=False)
-    email      = db.Column(db.String(100))
-    last_visit = db.Column(db.Date)
+    last_name  = db.Column(db.String(100), nullable=True, default='')
+    age        = db.Column(db.Integer, nullable=True)
+    gender     = db.Column(db.String(10), nullable=True)
+    phone      = db.Column(db.String(20), nullable=True)
+    email      = db.Column(db.String(100), nullable=True)
+    last_visit = db.Column(db.Date, nullable=True)
     status     = db.Column(db.String(20), default='Active')
-    condition  = db.Column(db.String(200))
-    address    = db.Column(db.String(200))
-    doctor_id  = db.Column(db.Integer, db.ForeignKey('doctors.id'))
+    condition  = db.Column(db.String(200), nullable=True)
+    address    = db.Column(db.String(200), nullable=True)
+    doctor_id  = db.Column(db.Integer, db.ForeignKey('doctors.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    cases        = db.relationship('Case', backref='patient', lazy=True, cascade='all, delete-orphan')
-    appointments = db.relationship('Appointment', backref='patient', lazy=True, cascade='all, delete-orphan')
+    cases = db.relationship('Case', backref='patient', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def name(self):
+        return f"{self.first_name} {self.last_name}".strip()
 
     def to_dict(self):
         return {
-            'id':        self.patient_id,
-            'mrn':       self.mrn,
-            'firstName': self.first_name,
-            'lastName':  self.last_name,
-            'age':       self.age,
-            'gender':    self.gender,
-            'phone':     self.phone,
-            'email':     self.email or '',
-            'lastVisit': self.last_visit.strftime('%Y-%m-%d') if self.last_visit else '',
-            'status':    self.status,
-            'condition': self.condition or '',
-            'address':   self.address,
-            'doctor_id': self.doctor_id,
-            'created_at':self.created_at.isoformat() if self.created_at else None
+            'id':         self.patient_id,
+            'mrn':        self.mrn or '',
+            'firstName':  self.first_name,
+            'lastName':   self.last_name or '',
+            'name':       self.name,
+            'age':        self.age,
+            'gender':     self.gender or '',
+            'phone':      self.phone or '',
+            'email':      self.email or '',
+            'lastVisit':  self.last_visit.strftime('%Y-%m-%d') if self.last_visit else '',
+            'status':     self.status,
+            'condition':  self.condition or '',
+            'address':    self.address or '',
+            'doctor_id':  self.doctor_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 
+# ── Case ───────────────────────────────────────────────────────────────────
 class Case(db.Model):
     __tablename__ = 'cases'
 
     id                  = db.Column(db.Integer, primary_key=True)
     case_id             = db.Column(db.String(50), unique=True, nullable=False)
-    patient_id          = db.Column(db.Integer, db.ForeignKey('patients.id'))
-    doctor_id           = db.Column(db.Integer, db.ForeignKey('doctors.id'))
-    nodule_size         = db.Column(db.String(20))
-    location            = db.Column(db.String(50))
-    tirads_score        = db.Column(db.Integer)
-    bethesda_category   = db.Column(db.String(10))
-    symptoms            = db.Column(db.Text)
-    diagnosis           = db.Column(db.Text)
-    notes               = db.Column(db.Text)
+    patient_id          = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=True)
+    doctor_id           = db.Column(db.Integer, db.ForeignKey('doctors.id'), nullable=True)
+    nodule_size         = db.Column(db.String(20), nullable=True)
+    location            = db.Column(db.String(50), nullable=True)
+    tirads_score        = db.Column(db.Integer, nullable=True)
+    bethesda_category   = db.Column(db.String(10), nullable=True)
+    symptoms            = db.Column(db.Text, nullable=True)
+    diagnosis           = db.Column(db.Text, nullable=True)
+    notes               = db.Column(db.Text, nullable=True)
     status              = db.Column(db.String(20), default='active')
-    image_path          = db.Column(db.String(200))
-    enhanced_image_path = db.Column(db.String(200))
+    image_path          = db.Column(db.String(200), nullable=True)
+    enhanced_image_path = db.Column(db.String(200), nullable=True)
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at          = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    updated_at          = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        patient = Patient.query.get(self.patient_id)
         return {
             'id':                  self.id,
             'case_id':             self.case_id,
             'patient_id':          self.patient_id,
-            'patient_name':        patient.name if patient else None,
+            'patient_name':        self.patient.name if self.patient else None,
             'doctor_id':           self.doctor_id,
             'nodule_size':         self.nodule_size,
             'location':            self.location,
@@ -148,42 +151,5 @@ class Case(db.Model):
             'image_path':          self.image_path,
             'enhanced_image_path': self.enhanced_image_path,
             'created_at':          self.created_at.isoformat() if self.created_at else None,
-            'updated_at':          self.updated_at.isoformat() if self.updated_at else None
-        }
-
-
-class Appointment(db.Model):
-    __tablename__ = 'appointments'
-
-    id                = db.Column(db.Integer, primary_key=True)
-    patient_id        = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=True)
-    patient_name      = db.Column(db.String(100), nullable=False)
-    patient_phone     = db.Column(db.String(20))
-    patient_id_number = db.Column(db.String(50))
-    appointment_date  = db.Column(db.Date, nullable=False)
-    appointment_time  = db.Column(db.Time, nullable=False)
-    appointment_type  = db.Column(db.String(50), default='Consultation')
-    duration          = db.Column(db.Integer, default=30)
-    status            = db.Column(db.String(20), default='Pending')
-    case_id           = db.Column(db.String(50))
-    notes             = db.Column(db.Text)
-    doctor_id         = db.Column(db.Integer, db.ForeignKey('doctors.id'))
-    created_at        = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id':                self.id,
-            'patient_id':        self.patient_id,
-            'patient_name':      self.patient_name,
-            'patient_phone':     self.patient_phone,
-            'patient_id_number': self.patient_id_number,
-            'appointment_time':  self.appointment_time.strftime('%H:%M') if self.appointment_time else None,
-            'appointment_date':  self.appointment_date.isoformat() if self.appointment_date else None,
-            'appointment_type':  self.appointment_type,
-            'duration':          self.duration,
-            'status':            self.status,
-            'case_id':           self.case_id,
-            'notes':             self.notes,
-            'doctor_id':         self.doctor_id,
-            'created_at':        self.created_at.isoformat() if self.created_at else None
+            'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
         }
