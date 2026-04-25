@@ -28,20 +28,21 @@ def forgot_password():
             "from": "noreply@diagnovate.org",
             "to": email,
             "subject": "Diagnovate – Reset Your Password",
-            "html": f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-                <div style="background:#0066CC;padding:24px;border-radius:8px 8px 0 0">
-                    <h1 style="color:white;margin:0">Diagnovate</h1>
-                </div>
-                <div style="padding:32px;border:1px solid #e0e0e0;border-radius:0 0 8px 8px">
-                    <h2>Password Reset Request</h2>
-                    <p>Dear Dr. {doctor.name},</p>
-                    <p>Click below to reset your password:</p>
-                    <div style="text-align:center;margin:32px 0">
-                        <a href="{reset_link}" style="background:#0066CC;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold">Reset Password</a>
-                    </div>
-                    <p style="color:#888;font-size:14px">⏱ This link expires in 1 hour.</p>
-                </div>
-            </div>"""
+            "html": f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff">
+  <div style="background:#0D9488;padding:24px 32px;border-radius:8px 8px 0 0">
+    <h1 style="color:white;margin:0;font-size:24px;letter-spacing:1px">Diagnovate</h1>
+  </div>
+  <div style="padding:40px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+    <h2 style="color:#111827;margin:0 0 8px">Reset your password</h2>
+    <p style="color:#6b7280;margin:0 0 32px">Hi Dr. {doctor.name}, click the button below to choose a new password.</p>
+    <div style="text-align:center;margin:0 0 32px">
+      <a href="{reset_link}" style="background:#0D9488;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">Reset Password</a>
+    </div>
+    <p style="color:#6b7280;text-align:center;font-size:14px;margin:0">This link expires in <strong>1 hour</strong>.</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0">
+    <p style="color:#9ca3af;font-size:12px;margin:0">Diagnovate &mdash; AI-powered thyroid diagnosis platform.<br>If you did not request this email, you can safely ignore it.</p>
+  </div>
+</div>"""
         })
         return jsonify({'success': True, 'message': 'If this email is registered, a reset link has been sent'}), 200
     except Exception as e:

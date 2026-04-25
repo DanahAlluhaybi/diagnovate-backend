@@ -23,7 +23,20 @@ REJECTION_REASONS = [
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
-def send_email(to_email: str, subject: str, body: str):
+def _admin_email_html(content: str) -> str:
+    return f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff">
+  <div style="background:#0D9488;padding:24px 32px;border-radius:8px 8px 0 0">
+    <h1 style="color:white;margin:0;font-size:24px;letter-spacing:1px">Diagnovate</h1>
+  </div>
+  <div style="padding:40px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+    {content}
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0">
+    <p style="color:#9ca3af;font-size:12px;margin:0">Diagnovate &mdash; AI-powered thyroid diagnosis platform.<br>If you have questions, please contact support.</p>
+  </div>
+</div>"""
+
+
+def send_email(to_email: str, subject: str, html_content: str):
     try:
         import resend
         resend.api_key = os.getenv("RESEND_API_KEY", "").strip()
@@ -31,7 +44,7 @@ def send_email(to_email: str, subject: str, body: str):
             "from": "noreply@diagnovate.org",
             "to": to_email,
             "subject": subject,
-            "html": f"<div style='font-family:Arial,sans-serif;padding:32px'>{body.replace(chr(10), '<br>')}</div>"
+            "html": html_content,
         })
         print(f"📧 Email sent to {to_email}")
     except Exception as e:
@@ -179,13 +192,14 @@ def approve(user_id):
 
         send_email(
             to_email=user.email,
-            subject="Welcome to Diagnovate!",
-            body=(
-                f"Dear Dr. {user.name},\n\n"
-                f"Your Diagnovate account has been approved!\n"
-                f"You can now log in and start using the platform.\n\n"
-                f"Best regards,\nDiagnovate Admin Team"
-            )
+            subject="Diagnovate – Your Account Has Been Approved",
+            html_content=_admin_email_html(f"""
+    <h2 style="color:#111827;margin:0 0 8px">Your account is approved!</h2>
+    <p style="color:#6b7280;margin:0 0 16px">Congratulations, Dr. {user.name}.</p>
+    <p style="color:#6b7280;margin:0 0 32px">Your Diagnovate account has been reviewed and approved. You can now log in and start using the platform.</p>
+    <div style="text-align:center">
+      <a href="https://diagnovate.org/login" style="background:#0D9488;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">Log In Now</a>
+    </div>""")
         )
 
         return jsonify({'success': True, 'message': f'{user.name} approved successfully'})
@@ -218,14 +232,14 @@ def reject(user_id):
         send_email(
             to_email=user.email,
             subject="Diagnovate – Registration Update",
-            body=(
-                f"Dear Dr. {user.name},\n\n"
-                f"Thank you for your interest in Diagnovate.\n"
-                f"Unfortunately, your registration was not approved.\n\n"
-                f"Reason: {reason}\n\n"
-                f"If you have questions, please contact support.\n\n"
-                f"Best regards,\nDiagnovate Admin Team"
-            )
+            html_content=_admin_email_html(f"""
+    <h2 style="color:#111827;margin:0 0 8px">Registration not approved</h2>
+    <p style="color:#6b7280;margin:0 0 16px">Dear Dr. {user.name},</p>
+    <p style="color:#6b7280;margin:0 0 24px">Thank you for your interest in Diagnovate. Unfortunately, your registration was not approved at this time.</p>
+    <div style="background:#fef2f2;border-left:4px solid #ef4444;border-radius:4px;padding:16px 20px;margin:0 0 24px">
+      <p style="color:#374151;margin:0"><strong>Reason:</strong> {reason}</p>
+    </div>
+    <p style="color:#6b7280;margin:0">If you believe this is an error or have questions, please contact our support team.</p>""")
         )
 
         return jsonify({'success': True, 'message': f'{user.name} rejected', 'reason': reason})
