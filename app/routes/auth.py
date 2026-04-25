@@ -143,25 +143,69 @@ def signup():
         db.session.add(doctor)
         db.session.commit()
 
-        if is_dev_mode():
-            print(f"DEV_MODE -- OTP for {phone} is 123456")
-            return jsonify({
-                'success':    True,
-                'message':    'DEV: كود OTP هو 123456',
-                'identifier': phone,
-            }), 200
-
-        get_twilio().verify.v2.services(SERVICE_SID) \
-            .verifications.create(to=phone, channel='sms')
-
         return jsonify({
-            'success':    True,
-            'message':    f'تم إرسال OTP إلى {phone}',
-            'identifier': phone,
+            'success':   True,
+            'next_step': 'choose_verification',
+            'email':     email,
+            'phone':     phone,
         }), 200
 
     except Exception as e:
         print(f"[SIGNUP ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/api/auth/send-otp', methods=['POST', 'OPTIONS'])
+def send_otp():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    try:
+        data       = request.get_json(force=True, silent=True)
+        identifier = (data.get('identifier') or '').strip()
+        method     = (data.get('method') or '').strip().lower()
+
+        if not identifier or method not in ('sms', 'email'):
+            return jsonify({'error': 'identifier and method ("sms" or "email") are required'}), 400
+
+        if method == 'sms':
+            phone = normalize_phone(identifier)
+            doctor = Doctor.query.filter_by(phone=phone, status='pending_otp').first()
+            if not doctor:
+                return jsonify({'error': 'No pending registration for this phone number'}), 400
+
+            if is_dev_mode():
+                print(f"DEV_MODE -- SMS OTP for {phone} is 123456")
+            else:
+                get_twilio().verify.v2.services(SERVICE_SID) \
+                    .verifications.create(to=phone, channel='sms')
+
+            return jsonify({'success': True, 'message': f'SMS OTP sent to {phone}'}), 200
+
+        # method == 'email'
+        email = identifier.lower()
+        doctor = Doctor.query.filter_by(email=email, status='pending_otp').first()
+        if not doctor:
+            return jsonify({'error': 'No pending registration for this email address'}), 400
+
+        email_code = '654321' if is_dev_mode() else str(random.randint(100000, 999999))
+        EmailOTP.query.filter_by(email=email).delete()
+        db.session.add(EmailOTP(
+            email=email,
+            code=email_code,
+            expires_at=datetime.utcnow() + timedelta(minutes=15),
+        ))
+        doctor.status = 'pending_email_otp'
+        db.session.commit()
+
+        if is_dev_mode():
+            print(f"DEV_MODE -- Email OTP for {email} is 654321")
+        else:
+            send_email_otp(email, doctor.name, email_code)
+
+        return jsonify({'success': True, 'message': f'Email OTP sent to {email}'}), 200
+
+    except Exception as e:
+        print(f"[SEND OTP ERROR] {e}")
         return jsonify({'error': str(e)}), 500
 
 
