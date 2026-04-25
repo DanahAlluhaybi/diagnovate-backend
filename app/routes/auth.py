@@ -199,10 +199,7 @@ def verify_signup():
         doctor.status = 'pending_email_otp'
         db.session.commit()
 
-        if is_dev_mode():
-            print(f"⚠️ DEV_MODE — Email OTP for {doctor.email} is 654321")
-        else:
-            send_email_otp(doctor.email, doctor.name, email_code)
+        send_email_otp(doctor.email, doctor.name, email_code)
 
         return jsonify({
             'success':    True,
