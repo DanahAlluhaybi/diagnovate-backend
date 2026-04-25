@@ -97,16 +97,6 @@ def send_welcome_email(email, doctor_name):
         print(f"⚠️ Failed to send welcome email: {e}")
 
 
-@auth_bp.route('/api/auth/test-email', methods=['POST', 'OPTIONS'])
-def test_email():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    test_address = 'danahalluhaybi@gmail.com'
-    code = '123456'
-    send_email_otp(test_address, 'Dana', code)
-    return jsonify({'success': True, 'sent_to': test_address, 'code': code}), 200
-
-
 @auth_bp.route('/api/auth/signup', methods=['POST', 'OPTIONS'])
 def signup():
     if request.method == 'OPTIONS':
