@@ -259,7 +259,7 @@ def verify_email_otp():
             identity=str(doctor.id),
             expires_delta=timedelta(days=7)
         )
-        return jsonify({
+        resp = jsonify({
             'success':      True,
             'access_token': access_token,
             'doctor': {
@@ -269,7 +269,10 @@ def verify_email_otp():
                 'phone':     doctor.phone,
                 'specialty': doctor.specialty,
             }
-        }), 201
+        })
+        resp.set_cookie('access_token', access_token,
+                        httponly=True, secure=True, samesite='Lax', max_age=1800)
+        return resp, 201
 
     except Exception as e:
         db.session.rollback()
@@ -329,7 +332,7 @@ def login():
         db.session.commit()
 
         access_token = create_access_token(identity=str(doctor.id))
-        return jsonify({
+        resp = jsonify({
             'success': True,
             'access_token': access_token,
             'doctor': {
@@ -339,7 +342,10 @@ def login():
                 'phone':     doctor.phone,
                 'specialty': doctor.specialty,
             }
-        }), 200
+        })
+        resp.set_cookie('access_token', access_token,
+                        httponly=True, secure=True, samesite='Lax', max_age=1800)
+        return resp, 200
 
     except Exception as e:
         print(f"[LOGIN ERROR] {e}")
