@@ -46,9 +46,9 @@ def send_email(to_email: str, subject: str, html_content: str):
             "subject": subject,
             "html": html_content,
         })
-        print(f"📧 Email sent to {to_email}")
+        print(f"Email sent to {to_email}")
     except Exception as e:
-        print(f"⚠️ Failed to send email: {e}")
+        print(f"Failed to send email: {e}")
 
 
 def get_admin_or_error():

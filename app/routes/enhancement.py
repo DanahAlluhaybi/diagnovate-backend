@@ -28,7 +28,7 @@ def get_sr_model():
     _model_loaded = True
 
     if not os.path.exists(MODEL_PATH):
-        print(f"⚠️ SR model not found at {MODEL_PATH} — using Lanczos fallback")
+        print(f"SR model not found at {MODEL_PATH} -- using Lanczos fallback")
         return None
 
     try:
@@ -65,11 +65,11 @@ def get_sr_model():
         net.load_state_dict(state_dict[key] if key else state_dict, strict=True)
         net.eval()
         _sr_model = net
-        print("✅ RealESRGAN general-x4v3 loaded")
+        print("RealESRGAN general-x4v3 loaded")
         return _sr_model
 
     except Exception as e:
-        print(f"⚠️ RealESRGAN load failed: {e} — using Lanczos fallback")
+        print(f"RealESRGAN load failed: {e} -- using Lanczos fallback")
         return None
 
 
@@ -165,7 +165,7 @@ def ultrasound_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
         upscaled = Image.open(io.BytesIO(upscaled_bytes)).convert('RGB')
         sr_method = "Replicate Clarity Upscaler x4"
     except Exception as e:
-        print(f"⚠️ Replicate upscale failed: {e} — using Lanczos fallback")
+        print(f"Replicate upscale failed: {e} -- using Lanczos fallback")
         w, h = pre_upscale.size
         upscaled = pre_upscale.resize((w * 4, h * 4), Image.LANCZOS)
         sr_method = "Lanczos x4 (fallback)"
@@ -204,14 +204,14 @@ def full_pipeline(img: Image.Image, image_type: str = 'auto') -> tuple[Image.Ima
         img       = Image.open(io.BytesIO(upscaled_bytes)).convert('RGB')
         sr_method = "Replicate Clarity Upscaler x4"
     except Exception as e:
-        print(f"⚠️ Replicate upscale failed: {e} — falling back to local pipeline")
+        print(f"Replicate upscale failed: {e} -- falling back to local pipeline")
         model = get_sr_model()
         if model is not None:
             try:
                 img       = apply_realesrgan(img, model)
                 sr_method = "RealESRGAN x4v3 (local fallback)"
             except Exception as e2:
-                print(f"⚠️ Local RealESRGAN failed: {e2} — using Lanczos")
+                print(f"Local RealESRGAN failed: {e2} -- using Lanczos")
                 img       = apply_lanczos(img)
                 sr_method = "Lanczos x4 (fallback)"
         else:
@@ -271,7 +271,7 @@ def enhance_image():
     try:
         enhanced_img, method_used = full_pipeline(img, image_type)
     except Exception as e:
-        print(f"❌ Enhancement pipeline failed: {e}")
+        print(f"Enhancement pipeline failed: {e}")
         return jsonify({'error': f'Enhancement failed: {str(e)}'}), 500
 
     enhanced_b64 = img_to_b64(enhanced_img)

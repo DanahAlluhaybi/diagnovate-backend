@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
-from app.models import db, Doctor
+from app.models import db, Doctor, EmailOTP
 from datetime import datetime, timedelta
 from twilio.rest import Client
 import os, re, resend, random
@@ -9,7 +9,6 @@ from werkzeug.security import generate_password_hash
 LOCKOUT_MAX_ATTEMPTS = 5
 LOCKOUT_DURATION     = timedelta(minutes=30)
 
-_email_otps = {}  # {email: {code, expires}}
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -71,9 +70,9 @@ def send_email_otp(email: str, doctor_name: str, code: str):
     </div>
     <p style="color:#6b7280;text-align:center;margin:0">This code expires in <strong>15 minutes</strong>.</p>""")
         })
-        print(f"📧 Email OTP sent to {email}")
+        print(f"Email OTP sent to {email}")
     except Exception as e:
-        print(f"⚠️ Failed to send email OTP: {e}")
+        print(f"Failed to send email OTP: {e}")
 
 
 def send_welcome_email(email, doctor_name):
@@ -92,9 +91,9 @@ def send_welcome_email(email, doctor_name):
       </a>
     </div>""")
         })
-        print(f"📧 Welcome email sent to {email}")
+        print(f"Welcome email sent to {email}")
     except Exception as e:
-        print(f"⚠️ Failed to send welcome email: {e}")
+        print(f"Failed to send welcome email: {e}")
 
 
 @auth_bp.route('/api/auth/signup', methods=['POST', 'OPTIONS'])
@@ -145,7 +144,7 @@ def signup():
         db.session.commit()
 
         if is_dev_mode():
-            print(f"⚠️ DEV_MODE — OTP للرقم {phone} هو 123456")
+            print(f"DEV_MODE -- OTP for {phone} is 123456")
             return jsonify({
                 'success':    True,
                 'message':    'DEV: كود OTP هو 123456',
@@ -192,10 +191,12 @@ def verify_signup():
                 return jsonify({'error': 'الكود غير صحيح أو منتهي الصلاحية'}), 401
 
         email_code = '654321' if is_dev_mode() else str(random.randint(100000, 999999))
-        _email_otps[doctor.email] = {
-            'code':    email_code,
-            'expires': datetime.utcnow() + timedelta(minutes=15),
-        }
+        EmailOTP.query.filter_by(email=doctor.email).delete()
+        db.session.add(EmailOTP(
+            email=doctor.email,
+            code=email_code,
+            expires_at=datetime.utcnow() + timedelta(minutes=15),
+        ))
         doctor.status = 'pending_email_otp'
         db.session.commit()
 
@@ -235,16 +236,20 @@ def verify_email_otp():
         if not doctor:
             return jsonify({'error': 'No pending email verification for this address'}), 400
 
-        entry = _email_otps.get(email)
+        EmailOTP.query.filter(EmailOTP.expires_at < datetime.utcnow()).delete()
+        db.session.commit()
+
+        entry = EmailOTP.query.filter_by(email=email, used=False).first()
         if not entry:
             return jsonify({'error': 'No OTP found — please restart signup'}), 400
-        if datetime.utcnow() > entry['expires']:
-            _email_otps.pop(email, None)
+        if datetime.utcnow() > entry.expires_at:
+            db.session.delete(entry)
+            db.session.commit()
             return jsonify({'error': 'Code has expired — please restart signup'}), 400
-        if code != entry['code']:
+        if code != entry.code:
             return jsonify({'error': 'Incorrect code'}), 401
 
-        _email_otps.pop(email, None)
+        db.session.delete(entry)
         doctor.status = 'pending'
         db.session.commit()
 

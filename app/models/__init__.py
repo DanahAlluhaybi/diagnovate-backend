@@ -157,3 +157,14 @@ class Case(db.Model):
             'created_at':          self.created_at.isoformat() if self.created_at else None,
             'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+# ── EmailOTP ───────────────────────────────────────────────────────────────
+class EmailOTP(db.Model):
+    __tablename__ = 'email_otps'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    email      = db.Column(db.String(100), nullable=False, index=True)
+    code       = db.Column(db.String(10), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used       = db.Column(db.Boolean, default=False, nullable=False)

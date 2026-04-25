@@ -17,7 +17,7 @@ try:
     model           = joblib.load(os.path.join(MODEL_DIR, 'thyroid_model.pkl'))
     imputer         = joblib.load(os.path.join(MODEL_DIR, 'imputer.pkl'))
     feature_columns = joblib.load(os.path.join(MODEL_DIR, 'feature_columns.pkl'))
-    print("✅ Thyroid cancer model loaded successfully")
+    print("Thyroid cancer model loaded successfully")
     print(f"   Features: {feature_columns}")
 except FileNotFoundError:
     print(" ML model files not found — run app/ml/train.py first")
@@ -101,7 +101,7 @@ def predict():
         }), 200
 
     except Exception as e:
-        print(f"❌ ERROR in predict: {str(e)}")
+        print(f"ERROR in predict: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -41,7 +41,7 @@ if ERRORS:
     print(f"\n{len(ERRORS)} error(s) found.")
     sys.exit(1)
 else:
-    print(f"\n✅ All {len(PASSING)} files passed syntax check.")
+    print(f"\nAll {len(PASSING)} files passed syntax check.")
 
 # ── Cross-file checks ────────────────────────────────────────────────────────
 print("\n── CROSS-FILE CHECKS ────────────────────────────")
@@ -65,7 +65,7 @@ for bp_name, bp_file in blueprints:
     registered  = f'register_blueprint({bp_name})' in INIT
     imported    = bp_name in INIT
 
-    status = "✅" if (file_exists and registered and imported) else "❌"
+    status = "OK  " if (file_exists and registered and imported) else "FAIL"
     issues = []
     if not file_exists: issues.append("FILE MISSING")
     if not imported:    issues.append("NOT IMPORTED")
@@ -76,15 +76,15 @@ for bp_name, bp_file in blueprints:
 
 # Check .env.example exists
 env_ok = os.path.exists(os.path.join(ROOT, '.env.example'))
-print(f"\n{'✅' if env_ok else '❌'}  .env.example exists")
+print(f"\n{'OK  ' if env_ok else 'FAIL'}  .env.example exists")
 
 req_ok = os.path.exists(os.path.join(ROOT, 'requirements.txt'))
-print(f"{'✅' if req_ok else '❌'}  requirements.txt exists")
+print(f"{'OK  ' if req_ok else 'FAIL'}  requirements.txt exists")
 
 git_ok = os.path.exists(os.path.join(ROOT, '.gitignore'))
-print(f"{'✅' if git_ok else '❌'}  .gitignore exists")
+print(f"{'OK  ' if git_ok else 'FAIL'}  .gitignore exists")
 
 ml_dir = os.path.exists(os.path.join(ROOT, 'app', 'ml'))
-print(f"{'✅' if ml_dir else '⚠️ '}  app/ml/ directory exists {'(model files needed)' if not ml_dir else ''}")
+print(f"{'OK  ' if ml_dir else 'WARN'}  app/ml/ directory exists {'(model files needed)' if not ml_dir else ''}")
 
 print("\n── DONE ─────────────────────────────────────────\n")

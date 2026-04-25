@@ -14,9 +14,9 @@ with app.app_context():
     with db.engine.connect() as conn:
         try:
             conn.execute(sa.text('ALTER TABLE doctors ADD COLUMN status VARCHAR(20) DEFAULT "pending"'))
-            print("✅ Added status column")
+            print("Added status column")
         except Exception:
-            print("ℹ️  status column already exists")
+            print("status column already exists")
         conn.commit()
 
     # ── Seed Admins ──────────────────────────────
@@ -33,9 +33,9 @@ with app.app_context():
             admin = Admin(name=admin_info["name"], email=admin_info["email"])
             admin.set_password(admin_info["password"])
             db.session.add(admin)
-            print(f"✅ Created admin: {admin_info['name']}")
+            print(f"Created admin: {admin_info['name']}")
         else:
-            print(f"ℹ️  Already exists: {admin_info['name']}")
+            print(f"Already exists: {admin_info['name']}")
 
     db.session.commit()
 
