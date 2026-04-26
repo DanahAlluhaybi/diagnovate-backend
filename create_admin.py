@@ -1,3 +1,4 @@
+# One-shot script to seed the initial admin account into the database.
 from app import create_app
 from app.models import db, Admin
 

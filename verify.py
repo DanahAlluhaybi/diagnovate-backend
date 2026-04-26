@@ -1,9 +1,4 @@
-"""
-verify.py — Run before deployment to confirm all files are syntactically valid
-and all cross-file references are consistent.
-
-Usage: python verify.py
-"""
+# Pre-deployment sanity checker — validates Python syntax and checks blueprint registrations.
 import ast
 import os
 import sys
@@ -18,11 +13,10 @@ def check_file(path):
         with open(path, 'r', encoding='utf-8') as f:
             source = f.read()
         ast.parse(source)
-        PASSING.append(f"✅  {rel}")
+        PASSING.append(f"  {rel}")
     except SyntaxError as e:
-        ERRORS.append(f"❌  {rel}  →  line {e.lineno}: {e.msg}")
+        ERRORS.append(f"  {rel}  ->  line {e.lineno}: {e.msg}")
 
-# Walk all .py files
 for dirpath, _, filenames in os.walk(ROOT):
     if any(skip in dirpath for skip in ['__pycache__', '.git', 'venv', '.venv']):
         continue
@@ -43,7 +37,6 @@ if ERRORS:
 else:
     print(f"\nAll {len(PASSING)} files passed syntax check.")
 
-# ── Cross-file checks ────────────────────────────────────────────────────────
 print("\n── CROSS-FILE CHECKS ────────────────────────────")
 
 INIT = open(os.path.join(ROOT, 'app', '__init__.py')).read()
@@ -74,7 +67,6 @@ for bp_name, bp_file in blueprints:
     detail = f"  [{', '.join(issues)}]" if issues else ""
     print(f"{status}  {bp_name:25s} ({bp_file}){detail}")
 
-# Check .env.example exists
 env_ok = os.path.exists(os.path.join(ROOT, '.env.example'))
 print(f"\n{'OK  ' if env_ok else 'FAIL'}  .env.example exists")
 

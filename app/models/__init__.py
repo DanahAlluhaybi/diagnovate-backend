@@ -168,3 +168,15 @@ class EmailOTP(db.Model):
     code       = db.Column(db.String(10), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     used       = db.Column(db.Boolean, default=False, nullable=False)
+
+
+# ── PasswordResetToken ─────────────────────────────────────────────────────
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_tokens'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    email      = db.Column(db.String(100), nullable=False, index=True)
+    token      = db.Column(db.String(100), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used       = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

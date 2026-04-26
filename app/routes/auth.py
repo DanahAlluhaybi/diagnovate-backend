@@ -301,7 +301,7 @@ def verify_email_otp():
 
         access_token = create_access_token(
             identity=str(doctor.id),
-            expires_delta=timedelta(days=7)
+            expires_delta=timedelta(minutes=30)
         )
         resp = jsonify({
             'success':      True,
@@ -394,3 +394,91 @@ def login():
     except Exception as e:
         print(f"[LOGIN ERROR] {e}")
         return jsonify({'error': str(e)}), 500
+
+# ── Endpoint ناقص: /api/auth/send-phone-otp (alias لـ send-otp بـ method=sms) ──
+@auth_bp.route('/api/auth/send-phone-otp', methods=['POST', 'OPTIONS'])
+def send_phone_otp():
+    """Alias يُستخدم من الـ frontend في resendOtp"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    try:
+        data  = request.get_json(force=True, silent=True)
+        phone = normalize_phone((data.get('identifier') or data.get('phone') or '').strip())
+
+        if not phone:
+            return jsonify({'error': 'Phone number is required'}), 400
+
+        doctor = Doctor.query.filter_by(phone=phone).filter(
+            Doctor.status.in_(['pending_otp', 'pending_email_otp'])
+        ).first()
+        if not doctor:
+            return jsonify({'error': 'No pending registration for this phone number'}), 400
+
+        if is_dev_mode():
+            print(f"DEV_MODE -- SMS OTP for {phone} is 123456")
+        else:
+            get_twilio().verify.v2.services(SERVICE_SID) \
+                .verifications.create(to=phone, channel='sms')
+
+        return jsonify({'success': True, 'message': f'SMS OTP sent to {phone}'}), 200
+    except Exception as e:
+        print(f"[SEND PHONE OTP ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Endpoint ناقص: /api/auth/send-email-otp (resend email OTP) ──
+@auth_bp.route('/api/auth/send-email-otp', methods=['POST', 'OPTIONS'])
+def resend_email_otp():
+    """Resend email OTP — يُستخدم من resendEmailOtp في الـ frontend"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    try:
+        data  = request.get_json(force=True, silent=True)
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        doctor = Doctor.query.filter_by(email=email, status='pending_email_otp').first()
+        if not doctor:
+            return jsonify({'error': 'No pending email verification for this address'}), 400
+
+        email_code = '654321' if is_dev_mode() else str(random.randint(100000, 999999))
+        EmailOTP.query.filter_by(email=email).delete()
+        db.session.add(EmailOTP(
+            email=email,
+            code=email_code,
+            expires_at=datetime.utcnow() + timedelta(minutes=15),
+        ))
+        db.session.commit()
+
+        if is_dev_mode():
+            print(f"DEV_MODE -- Email OTP for {email} is 654321")
+        else:
+            send_email_otp(email, doctor.name, email_code)
+
+        return jsonify({'success': True, 'message': f'Email OTP resent to {email}'}), 200
+    except Exception as e:
+        print(f"[RESEND EMAIL OTP ERROR] {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Endpoint ناقص: /api/auth/status ──
+@auth_bp.route('/api/auth/status', methods=['GET', 'OPTIONS'])
+def auth_status():
+    """يُستخدم من checkStatus في الـ frontend"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+    try:
+        verify_jwt_in_request()
+        doctor_id = int(get_jwt_identity())
+        doctor    = Doctor.query.get(doctor_id)
+        if not doctor:
+            return jsonify({'authenticated': False}), 401
+        return jsonify({
+            'authenticated': True,
+            'doctor': doctor.to_dict()
+        }), 200
+    except Exception:
+        return jsonify({'authenticated': False}), 401
