@@ -6,7 +6,7 @@ from app.models import db
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
-
+from app.routes.report import report_bp
 load_dotenv()
 
 
@@ -71,7 +71,7 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(forgot_password_bp)
     app.register_blueprint(cases_bp)
-
+    app.register_blueprint(report_bp)
     @app.route('/api/health', methods=['GET'])
     def health():
         return jsonify({'status': 'ok', 'message': 'Diagnovate backend is running'}), 200
