@@ -1,3 +1,4 @@
+# Entry point for the Flask app — creates the app and runs it on the configured port.
 import os
 from app import create_app
 

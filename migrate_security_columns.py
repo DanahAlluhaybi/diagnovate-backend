@@ -1,8 +1,4 @@
-"""
-One-shot migration: adds security columns to the doctors table.
-Safe to run multiple times — uses ADD COLUMN IF NOT EXISTS.
-Supports both SQLite (local dev) and PostgreSQL (production).
-"""
+# One-shot migration script that adds account lockout columns to the doctors table — safe to re-run.
 import os
 import sys
 from dotenv import load_dotenv
@@ -22,14 +18,12 @@ COLUMNS = [
 
 if DATABASE_URL.startswith("sqlite"):
     import sqlite3
-    # Extract file path from sqlite:///path or sqlite:////abs/path
     db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
     if not os.path.isabs(db_path):
         db_path = os.path.join(os.path.dirname(__file__), db_path)
     print(f"SQLite database: {db_path}")
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
-    # Get existing columns
     cur.execute("PRAGMA table_info(doctors)")
     rows = cur.fetchall()
     if not rows:

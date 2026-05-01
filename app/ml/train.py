@@ -10,7 +10,7 @@ import os
 # ── تحميل البيانات ──
 CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hypothyroid.csv')
 df = pd.read_csv(CSV_PATH, sep='\t')
-print(f"✅ Loaded: {df.shape[0]} rows, {df.shape[1]} columns")
+print(f"Loaded: {df.shape[0]} rows, {df.shape[1]} columns")
 
 # ── تنظيف البيانات ──
 drop_cols = ['patient_id', 'referral_source']
@@ -97,7 +97,7 @@ model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
 # ── تقييم الموديل ──
 y_pred = model.predict(X_test)
 acc = accuracy_score(y_test, y_pred)
-print(f"\n✅ Accuracy: {acc * 100:.2f}%")
+print(f"\nAccuracy: {acc * 100:.2f}%")
 print(classification_report(y_test, y_pred, target_names=target_le.classes_))
 
 # ── حفظ الموديل ──
@@ -106,7 +106,7 @@ joblib.dump(model,              os.path.join(save_dir, 'thyroid_model.pkl'))
 joblib.dump(label_encoders,     os.path.join(save_dir, 'label_encoders.pkl'))
 joblib.dump(X.columns.tolist(), os.path.join(save_dir, 'feature_columns.pkl'))
 
-print("\n✅ Model saved!")
+print("\nModel saved!")
 print("   → app/ml/thyroid_model.pkl")
 print("   → app/ml/label_encoders.pkl")
 print("   → app/ml/feature_columns.pkl")

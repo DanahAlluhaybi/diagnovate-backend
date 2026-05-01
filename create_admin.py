@@ -1,3 +1,4 @@
+# One-shot script to seed the initial admin account into the database.
 from app import create_app
 from app.models import db, Admin
 
@@ -10,4 +11,4 @@ with app.app_context():
     admin.set_password("Admin@1234")
     db.session.add(admin)
     db.session.commit()
-    print("✅ Admin created successfully")
+    print("Admin created successfully")
