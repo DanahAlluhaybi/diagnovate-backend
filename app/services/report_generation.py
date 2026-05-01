@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 import replicate
 
-MODEL_NAME = "anthropic/claude-4-sonnet"
+MODEL_NAME = "anthropic/claude-opus-4.7"
 
 
 def clean_value(value, default="N/A"):
@@ -170,10 +170,16 @@ Platform: Diagnovate Clinical Platform
 Date of Report: {today}
 """
 
-    output = replicate.run(
-        MODEL_NAME,
-        input={"prompt": prompt}
-    )
+    try:
+        output = replicate.run(
+            MODEL_NAME,
+            input={"prompt": prompt}
+        )
+    except Exception as e:
+        print("=== REPLICATE ERROR ===")
+        print(type(e).__name__)
+        print(str(e))
+        raise
 
     if isinstance(output, list):
         report_text = "".join(str(item) for item in output)
