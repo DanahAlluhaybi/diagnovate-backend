@@ -5,6 +5,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 db = SQLAlchemy()
 
 
+# ── Password Reset Token ───────────────────────────────────────────────────────
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_tokens'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    email      = db.Column(db.String(100), nullable=False, index=True)
+    token      = db.Column(db.String(100), nullable=False, unique=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used       = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 # ── Admin ──────────────────────────────────────────────────────────────────────
 class Admin(db.Model):
     __tablename__ = 'admins'
@@ -44,7 +56,6 @@ class Doctor(db.Model):
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
     status         = db.Column(db.String(20), default='pending')
 
-    # FIX: was incorrectly named 'relationships' — renamed to 'patients'
     patients  = db.relationship('Patient', backref='doctor', lazy=True, cascade='all, delete-orphan')
     cases     = db.relationship('Case',    backref='doctor', lazy=True, cascade='all, delete-orphan')
 
@@ -121,23 +132,20 @@ class Case(db.Model):
     case_id             = db.Column(db.String(50), unique=True, nullable=False)
     patient_id          = db.Column(db.Integer, db.ForeignKey('patients.id'))
     doctor_id           = db.Column(db.Integer, db.ForeignKey('doctors.id'))
-    # Thyroid / Ultrasound specific fields
     nodule_size         = db.Column(db.String(20))
-    location            = db.Column(db.String(50))          # e.g. left lobe, right lobe, isthmus
-    tirads_score        = db.Column(db.Integer)             # TI-RADS 1–5
-    bethesda_category   = db.Column(db.String(10))          # I – VI
+    location            = db.Column(db.String(50))
+    tirads_score        = db.Column(db.Integer)
+    bethesda_category   = db.Column(db.String(10))
     symptoms            = db.Column(db.Text)
     diagnosis           = db.Column(db.Text)
     notes               = db.Column(db.Text)
     status              = db.Column(db.String(20), default='active')
-    # Ultrasound image paths
-    image_path          = db.Column(db.String(200))         # original ultrasound
-    enhanced_image_path = db.Column(db.String(200))         # AI-enhanced ultrasound
+    image_path          = db.Column(db.String(200))
+    enhanced_image_path = db.Column(db.String(200))
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at          = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        # FIX: Patient has no .name — use first_name + last_name
         patient = Patient.query.get(self.patient_id)
         patient_name = (
             f"{patient.first_name} {patient.last_name}".strip()

@@ -27,7 +27,6 @@ def create_app():
     def options_handler(path=None):
         return jsonify({}), 200
 
-    # FIX: allow all origins for production (Vercel frontend)
     @app.after_request
     def after_request(response):
         response.headers.add('Access-Control-Allow-Origin',  '*')
@@ -40,13 +39,16 @@ def create_app():
     JWTManager(app)
 
     # ── Blueprints ────────────────────────────────────────────
-    from app.routes.auth        import auth_bp
-    from app.routes.dashboard   import dashboard_bp
-    from app.routes.enhancement import enhancement_bp
-    from app.routes.profile     import profile_bp
-    from app.routes.patients    import patients_bp
-    from app.routes.diagnosis   import diagnosis_bp
-    from app.routes.cases       import cases_bp
+    from app.routes.auth            import auth_bp
+    from app.routes.dashboard       import dashboard_bp
+    from app.routes.enhancement     import enhancement_bp
+    from app.routes.profile         import profile_bp
+    from app.routes.patients        import patients_bp
+    from app.routes.diagnosis       import diagnosis_bp
+    from app.routes.cases           import cases_bp
+    from app.routes.admin           import admin_bp
+    from app.routes.forgot_password import forgot_password_bp
+    from app.routes.reports         import reports_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -55,6 +57,9 @@ def create_app():
     app.register_blueprint(patients_bp)
     app.register_blueprint(diagnosis_bp)
     app.register_blueprint(cases_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(forgot_password_bp)
+    app.register_blueprint(reports_bp)
 
     # ── DB init ───────────────────────────────────────────────
     with app.app_context():

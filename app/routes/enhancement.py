@@ -16,7 +16,7 @@ enhancement_bp = Blueprint('enhancement', __name__)
 _ort_session  = None
 _model_loaded = False
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "realesr-general-x4v3.pth")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "realesr-general-x4v3.pth")
 
 
 # ── Model loader (lazy) ────────────────────────────────────────────────────────
