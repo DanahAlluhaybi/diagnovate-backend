@@ -21,4 +21,5 @@ ultralytics
 timm
 torch
 torchvision
+replicate
 
