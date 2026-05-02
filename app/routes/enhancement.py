@@ -2,7 +2,6 @@ import io
 import base64
 import urllib.request
 import numpy as np
-import cv2
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -76,6 +75,7 @@ def get_sr_model():
 # ── Processing steps ──────────────────────────────────────────────────────────
 
 def apply_denoising(img: Image.Image) -> Image.Image:
+    import cv2
     arr      = np.array(img)
     gray     = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
     denoised = cv2.fastNlMeansDenoising(gray, None, h=5,
@@ -100,6 +100,7 @@ def apply_lanczos(img: Image.Image) -> Image.Image:
 
 
 def apply_clahe(img: Image.Image) -> Image.Image:
+    import cv2
     arr        = np.array(img)
     lab        = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB)
     l, a, b    = cv2.split(lab)
@@ -113,6 +114,7 @@ def apply_clahe(img: Image.Image) -> Image.Image:
 
 
 def apply_sharpening(img: Image.Image) -> Image.Image:
+    import cv2
     arr       = np.array(img).astype(np.float32)
     blurred   = cv2.GaussianBlur(arr, (0, 0), sigmaX=1.8)
     sharpened = cv2.addWeighted(arr, 1.5, blurred, -0.5, 0)
@@ -139,6 +141,7 @@ def run_replicate_upscale(image_bytes: bytes) -> bytes:
 
 
 def ultrasound_pipeline(img: Image.Image) -> tuple[Image.Image, str]:
+    import cv2
     arr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
 
     # Denoise
