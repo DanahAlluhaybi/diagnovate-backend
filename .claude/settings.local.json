@@ -6,7 +6,8 @@
       "Bash(git add *)",
       "Bash(GIT_EDITOR=true git rebase --continue)",
       "Bash(git push *)",
-      "Bash(bash \"C:\\\\Users\\\\danny\\\\OneDrive\\\\Desktop\\\\apply_fixes.sh\")"
+      "Bash(bash \"C:\\\\Users\\\\danny\\\\OneDrive\\\\Desktop\\\\apply_fixes.sh\")",
+      "Bash(git commit *)"
     ]
   }
 }
