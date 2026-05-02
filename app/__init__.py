@@ -18,9 +18,8 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # ── Security ───────────────────────────────────────────────
-    app.config['JWT_SECRET_KEY']          = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
-    app.config['SECRET_KEY']              = os.getenv('SECRET_KEY',     'flask-secret-key-change-in-production')
-    # FIX: must be timedelta, not int (seconds)
+    app.config['JWT_SECRET_KEY']           = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
+    app.config['SECRET_KEY']               = os.getenv('SECRET_KEY',     'flask-secret-key-change-in-production')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 
     # ── CORS preflight catch-all ───────────────────────────────
@@ -28,9 +27,10 @@ def create_app():
     def options_handler(path=None):
         return jsonify({}), 200
 
+    # FIX: allow all origins for production (Vercel frontend)
     @app.after_request
     def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin',  'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Origin',  '*')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')
         return response
@@ -40,7 +40,6 @@ def create_app():
     JWTManager(app)
 
     # ── Blueprints ────────────────────────────────────────────
-    # Appointments removed — system focuses on Ultrasound + Lab only
     from app.routes.auth        import auth_bp
     from app.routes.dashboard   import dashboard_bp
     from app.routes.enhancement import enhancement_bp
