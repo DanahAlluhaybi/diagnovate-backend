@@ -1,11 +1,15 @@
 """
 Image Enhancement — Ultrasound only (RealESRGAN + CLAHE + Denoising + Sharpening).
-MRI / X-Ray references removed. Pipeline focuses on thyroid ultrasound scans.
+Memory-optimised: input capped at 512px, model runs on CPU with gc cleanup.
+Returns Cloudinary URLs instead of base64 to avoid 414 / OOM errors.
 """
 import io
+import gc
 import base64
 import numpy as np
 import cv2
+import cloudinary
+import cloudinary.uploader
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from PIL import Image
@@ -18,8 +22,23 @@ _model_loaded = False
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "realesr-general-x4v3.pth")
 
+cloudinary.config(
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+    api_key    = os.environ.get("CLOUDINARY_API_KEY",    ""),
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET", ""),
+)
 
-# ── Model loader (lazy) ────────────────────────────────────────────────────────
+MAX_INPUT_PX = 512
+
+
+def cap_size(img: Image.Image, max_px: int = MAX_INPUT_PX) -> Image.Image:
+    w, h = img.size
+    if max(w, h) <= max_px:
+        return img
+    scale = max_px / max(w, h)
+    return img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+
 def get_model():
     global _ort_session, _model_loaded
     if _model_loaded:
@@ -39,7 +58,6 @@ def get_model():
                 self.num_conv   = num_conv
                 self.upscale    = upscale
                 self.act_type   = act_type
-
                 self.body = nn.ModuleList()
                 self.body.append(nn.Conv2d(num_in_ch, num_feat, 3, 1, 1))
 
@@ -52,7 +70,6 @@ def get_model():
                 for _ in range(num_conv):
                     self.body.append(nn.Conv2d(num_feat, num_feat, 3, 1, 1))
                     self.body.append(_act())
-
                 self.body.append(nn.Conv2d(num_feat, num_out_ch * upscale * upscale, 3, 1, 1))
                 self.upsampler = nn.PixelShuffle(upscale)
 
@@ -64,21 +81,15 @@ def get_model():
                 base = F.interpolate(x, scale_factor=self.upscale, mode='nearest')
                 return out + base
 
-        model_net = SRVGGNetCompact(
-            num_in_ch=3, num_out_ch=3,
-            num_feat=64, num_conv=32,
-            upscale=4, act_type='prelu'
-        )
+        model_net = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
         state_dict = torch.load(MODEL_PATH, map_location='cpu')
         key = 'params_ema' if 'params_ema' in state_dict else ('params' if 'params' in state_dict else None)
         model_net.load_state_dict(state_dict[key] if key else state_dict, strict=True)
         model_net.eval()
-
         _ort_session  = model_net
         _model_loaded = True
         print("✅ RealESRGAN general-x4v3 loaded")
         return _ort_session
-
     except Exception as e:
         print(f"⚠️ RealESRGAN failed to load: {e} — using Lanczos fallback")
         _model_loaded = True
@@ -86,7 +97,6 @@ def get_model():
         return None
 
 
-# ── Pipeline steps ─────────────────────────────────────────────────────────────
 def apply_realesrgan(img: Image.Image, model) -> Image.Image:
     import torch
     arr    = np.array(img).astype(np.float32) / 255.0
@@ -94,7 +104,10 @@ def apply_realesrgan(img: Image.Image, model) -> Image.Image:
     with torch.no_grad():
         out = model(tensor)
     out_np = out.squeeze(0).permute(1, 2, 0).clamp(0, 1).numpy()
-    return Image.fromarray((out_np * 255).astype(np.uint8))
+    result = Image.fromarray((out_np * 255).astype(np.uint8))
+    del tensor, out, out_np, arr
+    gc.collect()
+    return result
 
 
 def apply_lanczos(img: Image.Image) -> Image.Image:
@@ -105,8 +118,7 @@ def apply_lanczos(img: Image.Image) -> Image.Image:
 def apply_denoising(img: Image.Image) -> Image.Image:
     arr      = np.array(img)
     gray     = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    denoised = cv2.fastNlMeansDenoising(gray, None, h=5,
-                                         templateWindowSize=7, searchWindowSize=21)
+    denoised = cv2.fastNlMeansDenoising(gray, None, h=5, templateWindowSize=7, searchWindowSize=21)
     bilat    = cv2.bilateralFilter(denoised, d=7, sigmaColor=45, sigmaSpace=45)
     return Image.fromarray(cv2.cvtColor(bilat, cv2.COLOR_GRAY2RGB))
 
@@ -131,9 +143,8 @@ def apply_sharpening(img: Image.Image) -> Image.Image:
 
 
 def full_enhancement_pipeline(img: Image.Image) -> tuple:
-    """Returns (enhanced_image, sr_method_description)."""
+    img = cap_size(img, MAX_INPUT_PX)
     img = apply_denoising(img)
-
     model = get_model()
     if model is not None:
         try:
@@ -146,19 +157,25 @@ def full_enhancement_pipeline(img: Image.Image) -> tuple:
     else:
         img       = apply_lanczos(img)
         sr_method = "Lanczos x4 (fallback)"
-
     img = apply_clahe(img)
     img = apply_sharpening(img)
     return img, sr_method
 
 
+def upload_to_cloudinary(img: Image.Image, folder: str) -> str:
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    result = cloudinary.uploader.upload(buf, folder=folder, resource_type="image")
+    return result["secure_url"]
+
+
 def pil_to_base64(img: Image.Image, fmt: str = "PNG") -> str:
     buf = io.BytesIO()
     img.save(buf, format=fmt)
-    return base64.b64encode(buf.getvalue()).decode('utf-8')
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('utf-8')
 
 
-# ── Route ──────────────────────────────────────────────────────────────────────
 @enhancement_bp.route('/api/enhance', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def enhance():
@@ -172,28 +189,39 @@ def enhance():
     if not file.filename:
         return jsonify({'error': 'Empty filename'}), 400
 
-    # Validate: only accept common ultrasound image formats
     allowed = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif'}
     ext     = os.path.splitext(file.filename.lower())[1]
     if ext not in allowed:
         return jsonify({'error': f'Unsupported file type {ext}. Upload a PNG or JPEG ultrasound image.'}), 400
 
     try:
-        raw   = file.read()
-        img   = Image.open(io.BytesIO(raw)).convert('RGB')
-        orig_b64 = pil_to_base64(img)
+        raw  = file.read()
+        img  = Image.open(io.BytesIO(raw)).convert('RGB')
+        orig = img.copy()
 
         enhanced, sr_method = full_enhancement_pipeline(img)
-        enh_b64  = pil_to_base64(enhanced)
+
+        cloud_ok = bool(os.environ.get("CLOUDINARY_CLOUD_NAME"))
+        if cloud_ok:
+            try:
+                original_url = upload_to_cloudinary(orig,     "diagnovate/originals")
+                enhanced_url = upload_to_cloudinary(enhanced, "diagnovate/enhanced")
+            except Exception as e:
+                print(f"⚠️ Cloudinary upload failed: {e} — falling back to base64")
+                cloud_ok = False
+
+        if not cloud_ok:
+            original_url = pil_to_base64(orig)
+            enhanced_url = pil_to_base64(enhanced)
 
         return jsonify({
-            'success':          True,
-            'original_image':   orig_b64,
-            'enhanced_image':   enh_b64,
-            'sr_method':        sr_method,
-            'original_size':    {'width': img.size[0],      'height': img.size[1]},
-            'enhanced_size':    {'width': enhanced.size[0], 'height': enhanced.size[1]},
-            'scan_type':        'Ultrasound',
+            'success':        True,
+            'original_image': original_url,
+            'enhanced_image': enhanced_url,
+            'sr_method':      sr_method,
+            'original_size':  {'width': orig.size[0],     'height': orig.size[1]},
+            'enhanced_size':  {'width': enhanced.size[0], 'height': enhanced.size[1]},
+            'scan_type':      'Ultrasound',
         }), 200
 
     except Exception as e:
