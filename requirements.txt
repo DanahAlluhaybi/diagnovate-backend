@@ -17,9 +17,7 @@ psycopg2-binary
 xgboost==2.0.3
 cloudinary
 anthropic
-ultralytics
 timm
 torch
 torchvision
 replicate
-
