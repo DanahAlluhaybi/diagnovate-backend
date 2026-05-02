@@ -6,22 +6,28 @@ from datetime import datetime
 patients_bp = Blueprint('patients', __name__)
 
 
+def _doctor_id() -> int:
+    return int(get_jwt_identity())
+
+
+# ── LIST ───────────────────────────────────────────────────────────────────────
 @patients_bp.route('/api/patients', methods=['GET'])
 @jwt_required()
 def get_patients():
     try:
-        doctor_id = int(get_jwt_identity())
-        patients  = Patient.query.filter_by(doctor_id=doctor_id).all()
-        return jsonify({'success': True, 'data': [p.to_dict() for p in patients]}), 200
+        doctor_id = _doctor_id()
+        all_patients = Patient.query.filter_by(doctor_id=doctor_id).all()
+        return jsonify({'success': True, 'data': [p.to_dict() for p in all_patients]}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ── GET ONE ────────────────────────────────────────────────────────────────────
 @patients_bp.route('/api/patients/<string:patient_id>', methods=['GET'])
 @jwt_required()
 def get_patient(patient_id):
     try:
-        doctor_id = int(get_jwt_identity())
+        doctor_id = _doctor_id()
         patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
@@ -30,11 +36,12 @@ def get_patient(patient_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ── CREATE ─────────────────────────────────────────────────────────────────────
 @patients_bp.route('/api/patients', methods=['POST'])
 @jwt_required()
 def create_patient():
     try:
-        doctor_id = int(get_jwt_identity())
+        doctor_id = _doctor_id()
         data      = request.get_json(force=True, silent=True)
 
         required = ['firstName', 'lastName', 'mrn', 'age', 'phone', 'gender']
@@ -42,16 +49,22 @@ def create_patient():
             if not data or field not in data:
                 return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
 
-        # ✅ Check MRN uniqueness
+        # Validate unique MRN
         if Patient.query.filter_by(mrn=data['mrn']).first():
-            return jsonify({'success': False, 'error': 'MRN already exists'}), 400
+            return jsonify({'success': False, 'error': 'MRN already exists'}), 409
 
+        # Generate patient_id
         last_patient = Patient.query.order_by(Patient.id.desc()).first()
         try:
             last_num = int(last_patient.patient_id.split('-')[1]) if last_patient else 0
         except Exception:
             last_num = 0
-        patient_id = f"PT-{str(last_num + 1).zfill(4)}"
+        patient_id = f"PT-{str(last_num + 1).zfill(3)}"
+
+        # Ensure uniqueness
+        while Patient.query.filter_by(patient_id=patient_id).first():
+            last_num  += 1
+            patient_id = f"PT-{str(last_num + 1).zfill(3)}"
 
         new_patient = Patient(
             patient_id = patient_id,
@@ -64,6 +77,7 @@ def create_patient():
             email      = data.get('email', ''),
             condition  = data.get('condition', ''),
             status     = data.get('status', 'Active'),
+            address    = data.get('address', ''),
             last_visit = datetime.now().date(),
             doctor_id  = doctor_id,
         )
@@ -71,18 +85,23 @@ def create_patient():
         db.session.add(new_patient)
         db.session.commit()
 
-        return jsonify({'success': True, 'message': 'Patient created', 'data': new_patient.to_dict()}), 201
+        return jsonify({
+            'success': True,
+            'message': 'Patient created successfully',
+            'data':    new_patient.to_dict(),
+        }), 201
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ── UPDATE (full) ──────────────────────────────────────────────────────────────
 @patients_bp.route('/api/patients/<string:patient_id>', methods=['PUT'])
 @jwt_required()
 def update_patient(patient_id):
     try:
-        doctor_id = int(get_jwt_identity())
+        doctor_id = _doctor_id()
         patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
@@ -97,6 +116,7 @@ def update_patient(patient_id):
         if 'email'      in data: patient.email      = data['email']
         if 'condition'  in data: patient.condition  = data['condition']
         if 'status'     in data: patient.status     = data['status']
+        if 'address'    in data: patient.address    = data['address']
 
         db.session.commit()
         return jsonify({'success': True, 'data': patient.to_dict()}), 200
@@ -105,11 +125,12 @@ def update_patient(patient_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ── PATCH (partial) ────────────────────────────────────────────────────────────
 @patients_bp.route('/api/patients/<string:patient_id>', methods=['PATCH'])
 @jwt_required()
 def patch_patient(patient_id):
     try:
-        doctor_id = int(get_jwt_identity())
+        doctor_id = _doctor_id()
         patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
@@ -117,6 +138,11 @@ def patch_patient(patient_id):
         data = request.get_json(force=True, silent=True) or {}
         if 'status'    in data: patient.status    = data['status']
         if 'condition' in data: patient.condition = data['condition']
+        if 'lastVisit' in data:
+            try:
+                patient.last_visit = datetime.strptime(data['lastVisit'], '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
         db.session.commit()
         return jsonify({'success': True, 'data': patient.to_dict()}), 200
@@ -125,18 +151,19 @@ def patch_patient(patient_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ── DELETE ─────────────────────────────────────────────────────────────────────
 @patients_bp.route('/api/patients/<string:patient_id>', methods=['DELETE'])
 @jwt_required()
 def delete_patient(patient_id):
     try:
-        doctor_id = int(get_jwt_identity())
+        doctor_id = _doctor_id()
         patient   = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
         if not patient:
             return jsonify({'success': False, 'error': 'Patient not found'}), 404
 
         db.session.delete(patient)
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Patient deleted'}), 200
+        return jsonify({'success': True, 'message': 'Patient deleted successfully'}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500

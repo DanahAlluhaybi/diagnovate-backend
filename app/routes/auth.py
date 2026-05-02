@@ -1,324 +1,196 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
-from app.models import db, Doctor, EmailOTP
-from datetime import datetime, timedelta
-from twilio.rest import Client
-import os, re, resend, random
-from werkzeug.security import generate_password_hash
-
-LOCKOUT_MAX_ATTEMPTS = 5
-LOCKOUT_DURATION     = timedelta(minutes=30)
-
+from app.models import db, Doctor
+from datetime import timedelta
+import os
+import re
 
 auth_bp = Blueprint('auth', __name__)
 
-ACCOUNT_SID  = os.getenv("TWILIO_ACCOUNT_SID")
-AUTH_TOKEN   = os.getenv("TWILIO_AUTH_TOKEN")
-SERVICE_SID  = os.getenv("TWILIO_SERVICE_SID")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://diagnovate.org")
+DEV_MODE    = os.getenv("DEV_MODE", "false").lower() == "true"
+ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
+SERVICE_SID = os.getenv("TWILIO_SERVICE_SID")
 
-def is_dev_mode():
-    return os.getenv("DEV_MODE", "false").lower() == "true"
-
-resend.api_key = os.getenv("RESEND_API_KEY", "")
-
-def get_twilio():
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token  = os.getenv("TWILIO_AUTH_TOKEN")
-    if not account_sid or not auth_token:
-        raise RuntimeError("Twilio credentials not configured")
-    return Client(account_sid, auth_token)
-
-
-def validate_email(email):
-    return re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email) is not None
-
-def validate_phone(phone):
-    return re.match(r'^\+966\d{9}$', phone) is not None
-
-def normalize_phone(phone):
-    if phone.startswith('05') and len(phone) == 10:
-        return '+966' + phone[1:]
-    return phone
-
-def _email_html_wrapper(content: str) -> str:
-    return f"""<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9fafb">
-  <div style="background:#0D1117;padding:28px 40px;text-align:center">
-    <table role="presentation" style="margin:0 auto;border-collapse:collapse">
-      <tr>
-        <td style="padding-right:10px;vertical-align:middle">
-          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="10" y="1" width="6" height="24" rx="2" fill="#0D9488"/>
-            <rect x="1" y="10" width="24" height="6" rx="2" fill="#0D9488"/>
-          </svg>
-        </td>
-        <td style="vertical-align:middle">
-          <span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:2px">Diagnovate</span>
-        </td>
-      </tr>
-    </table>
-  </div>
-  <div style="background:#ffffff;padding:40px;color:#1f2937;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
-    {content}
-    <hr style="border:none;border-top:1px solid #f3f4f6;margin:32px 0">
-    <p style="color:#9ca3af;font-size:12px;margin:0;text-align:center">Diagnovate &mdash; AI-powered thyroid diagnosis platform.<br>If you did not request this email, you can safely ignore it.</p>
-  </div>
-  <div style="background:#f9fafb;padding:16px 40px;text-align:center;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
-    <p style="color:#9ca3af;font-size:11px;margin:0">&copy; 2025 Diagnovate. All rights reserved.</p>
-  </div>
-</div>"""
-
-
-def send_email_otp(email: str, doctor_name: str, code: str):
+# FIX: only instantiate Twilio client when NOT in DEV_MODE
+# Prevents crash on startup when credentials are missing
+twilio_client = None
+if not DEV_MODE:
     try:
-        resend.Emails.send({
-            "from": "noreply@diagnovate.org",
-            "to": email,
-            "subject": "Diagnovate – Your Email Verification Code",
-            "html": _email_html_wrapper(f"""
-    <h2 style="color:#111827;margin:0 0 8px">Verify your email</h2>
-    <p style="color:#6b7280;margin:0 0 32px">Hi Dr. {doctor_name}, enter the code below to verify your email address.</p>
-    <div style="text-align:center;margin:0 0 32px">
-      <div style="display:inline-block;background:#f0fdf4;border:2px solid #0D9488;border-radius:12px;padding:24px 40px">
-        <span style="font-size:48px;font-weight:700;letter-spacing:12px;color:#0D9488;font-family:'Courier New',monospace">{code}</span>
-      </div>
-    </div>
-    <p style="color:#6b7280;text-align:center;margin:0">This code expires in <strong>15 minutes</strong>.</p>""")
-        })
-        print(f"Email OTP sent to {email}")
+        from twilio.rest import Client
+        twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
+        print("✅ Twilio client loaded")
     except Exception as e:
-        print(f"Failed to send email OTP: {e}")
+        print(f"⚠️ Twilio init failed: {e}")
 
 
-def send_welcome_email(email, doctor_name):
-    try:
-        resend.Emails.send({
-            "from": "noreply@diagnovate.org",
-            "to": email,
-            "subject": "Welcome to Diagnovate!",
-            "html": _email_html_wrapper(f"""
-    <h2 style="color:#111827;margin:0 0 8px">Welcome, Dr. {doctor_name}!</h2>
-    <p style="color:#6b7280;margin:0 0 16px">Your registration request has been received successfully.</p>
-    <p style="color:#6b7280;margin:0 0 32px">Our admin team will review your details and notify you by email once a decision has been made.</p>
-    <div style="text-align:center;margin:0 0 32px">
-      <a href="{FRONTEND_URL}/pending-approval" style="background:#0D9488;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">
-        Track Your Request
-      </a>
-    </div>""")
-        })
-        print(f"Welcome email sent to {email}")
-    except Exception as e:
-        print(f"Failed to send welcome email: {e}")
+def validate_email(email: str) -> bool:
+    return bool(re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email))
 
 
+def validate_phone(phone: str) -> bool:
+    return bool(re.match(r'^(\+966|05)\d{8}$', phone))
+
+
+# ── SIGNUP ─────────────────────────────────────────────────────────────────────
 @auth_bp.route('/api/auth/signup', methods=['POST', 'OPTIONS'])
 def signup():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     try:
-        data      = request.get_json(force=True, silent=True)
-        name      = (data.get('name') or '').strip()
-        email     = (data.get('email') or '').strip()
-        phone     = normalize_phone((data.get('phone') or '').strip())
-        password  = (data.get('password') or '')
-        specialty = (data.get('specialty') or 'Thyroid Specialist').strip()
+        data = request.get_json(force=True, silent=True)
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        name     = (data.get('name') or '').strip()
+        email    = (data.get('email') or '').strip()
+        phone    = (data.get('phone') or '').strip()
+        password = (data.get('password') or '').strip()
 
         if not name:
             return jsonify({'error': 'Name is required'}), 400
-        if not email or not validate_email(email):
-            return jsonify({'error': 'Invalid email address'}), 400
-        if not phone or not validate_phone(phone):
-            return jsonify({'error': 'Invalid phone number, use +966XXXXXXXXX or 05XXXXXXXX'}), 400
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        if not phone:
+            return jsonify({'error': 'Phone is required'}), 400
         if not password or len(password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        if not validate_email(email):
+            return jsonify({'error': 'Invalid email format'}), 400
+        if not validate_phone(phone):
+            return jsonify({'error': 'Invalid phone format. Use +966XXXXXXXX or 05XXXXXXXX'}), 400
 
-        INCOMPLETE_STATUSES = ['rejected', 'pending_otp', 'pending_email_otp']
+        if Doctor.query.filter_by(email=email).first():
+            return jsonify({'error': 'Email already registered'}), 409
+        if Doctor.query.filter_by(phone=phone).first():
+            return jsonify({'error': 'Phone already registered'}), 409
 
-        stale = Doctor.query.filter(
-            db.or_(Doctor.email==email, Doctor.phone==phone),
-            Doctor.status.in_(INCOMPLETE_STATUSES)
-        ).all()
-        for d in stale:
-            db.session.delete(d)
-        db.session.commit()
-
-        existing_email = Doctor.query.filter_by(email=email).filter(
-            Doctor.status.notin_(INCOMPLETE_STATUSES)
-        ).first()
-        if existing_email:
-            return jsonify({'error': 'Email is already registered'}), 400
-
-        existing_phone = Doctor.query.filter_by(phone=phone).filter(
-            Doctor.status.notin_(INCOMPLETE_STATUSES)
-        ).first()
-        if existing_phone:
-            return jsonify({'error': 'Phone number is already registered'}), 400
-        doctor = Doctor(name=name, email=email, phone=phone, specialty=specialty, status='pending_otp')
-        doctor.password_hash = generate_password_hash(password)
+        doctor = Doctor(
+            name           = name,
+            email          = email,
+            phone          = phone,
+            specialty      = data.get('specialty', 'Thyroid Specialist'),
+            license_number = data.get('license_number', ''),
+            status         = 'pending',
+        )
+        doctor.set_password(password)
         db.session.add(doctor)
         db.session.commit()
 
         return jsonify({
-            'success':   True,
-            'next_step': 'choose_verification',
-            'email':     email,
-            'phone':     phone,
-        }), 200
-
-    except Exception as e:
-        print(f"[SIGNUP ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@auth_bp.route('/api/auth/send-otp', methods=['POST', 'OPTIONS'])
-def send_otp():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    try:
-        data       = request.get_json(force=True, silent=True)
-        identifier = (data.get('identifier') or '').strip()
-        method     = (data.get('method') or '').strip().lower()
-
-        if not identifier or method not in ('sms', 'email'):
-            return jsonify({'error': 'identifier and method ("sms" or "email") are required'}), 400
-
-        if method == 'sms':
-            phone = normalize_phone(identifier)
-            doctor = Doctor.query.filter_by(phone=phone, status='pending_otp').first()
-            if not doctor:
-                return jsonify({'error': 'No pending registration for this phone number'}), 400
-
-            if is_dev_mode():
-                print(f"DEV_MODE -- SMS OTP for {phone} is 123456")
-            else:
-                get_twilio().verify.v2.services(SERVICE_SID) \
-                    .verifications.create(to=phone, channel='sms')
-
-            return jsonify({'success': True, 'message': f'SMS OTP sent to {phone}'}), 200
-
-        # method == 'email'
-        email = identifier.lower()
-        doctor = Doctor.query.filter_by(email=email, status='pending_otp').first()
-        if not doctor:
-            return jsonify({'error': 'No pending registration for this email address'}), 400
-
-        email_code = '654321' if is_dev_mode() else str(random.randint(100000, 999999))
-        EmailOTP.query.filter_by(email=email).delete()
-        db.session.add(EmailOTP(
-            email=email,
-            code=email_code,
-            expires_at=datetime.utcnow() + timedelta(minutes=15),
-        ))
-        doctor.status = 'pending_email_otp'
-        db.session.commit()
-
-        if is_dev_mode():
-            print(f"DEV_MODE -- Email OTP for {email} is 654321")
-        else:
-            send_email_otp(email, doctor.name, email_code)
-
-        return jsonify({'success': True, 'message': f'Email OTP sent to {email}'}), 200
-
-    except Exception as e:
-        print(f"[SEND OTP ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@auth_bp.route('/api/auth/verify-signup', methods=['POST', 'OPTIONS'])
-def verify_signup():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    try:
-        data  = request.get_json(force=True, silent=True)
-        phone = normalize_phone((data.get('identifier') or '').strip())
-        code  = (data.get('code') or '').strip()
-
-        if not phone or not code:
-            return jsonify({'error': 'رقم الهاتف والكود مطلوبان'}), 400
-
-        doctor = Doctor.query.filter_by(phone=phone, status='pending_otp').first()
-        if not doctor:
-            return jsonify({'error': 'لا يوجد تسجيل معلق لهذا الرقم، سجّل من جديد'}), 400
-
-        if is_dev_mode():
-            if code != '123456':
-                return jsonify({'error': 'كود خاطئ (DEV: استخدم 123456)'}), 401
-        else:
-            result = get_twilio().verify.v2.services(SERVICE_SID) \
-                .verification_checks.create(to=phone, code=code)
-            if result.status != 'approved':
-                return jsonify({'error': 'الكود غير صحيح أو منتهي الصلاحية'}), 401
-
-        email_code = '654321' if is_dev_mode() else str(random.randint(100000, 999999))
-        EmailOTP.query.filter_by(email=doctor.email).delete()
-        db.session.add(EmailOTP(
-            email=doctor.email,
-            code=email_code,
-            expires_at=datetime.utcnow() + timedelta(minutes=15),
-        ))
-        doctor.status = 'pending_email_otp'
-        db.session.commit()
-
-        send_email_otp(doctor.email, doctor.name, email_code)
-
-        return jsonify({
-            'success':    True,
-            'next_step':  'verify_email',
-            'email':      doctor.email,
-            'message':    f'SMS verified. A 6-digit code has been sent to {doctor.email}',
-        }), 200
+            'success': True,
+            'message': 'Account created successfully. Awaiting admin approval.',
+        }), 201
 
     except Exception as e:
         db.session.rollback()
-        print(f"[VERIFY SIGNUP ERROR] {e}")
+        print(f"ERROR in signup: {e}")
         return jsonify({'error': str(e)}), 500
 
 
-@auth_bp.route('/api/auth/verify-otp', methods=['POST', 'OPTIONS'])
-def verify_otp():
-    return verify_signup()
-
-
-@auth_bp.route('/api/auth/verify-email-otp', methods=['POST', 'OPTIONS'])
-def verify_email_otp():
+# ── LOGIN ──────────────────────────────────────────────────────────────────────
+@auth_bp.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+def login():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     try:
-        data  = request.get_json(force=True, silent=True)
-        email = (data.get('email') or '').strip().lower()
-        code  = (data.get('code') or '').strip()
+        data = request.get_json(force=True, silent=True)
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-        if not email or not code:
-            return jsonify({'error': 'Email and code are required'}), 400
+        identifier = (data.get('identifier') or '').strip()
+        password   = (data.get('password') or '').strip()
 
-        doctor = Doctor.query.filter_by(email=email, status='pending_email_otp').first()
+        if not identifier:
+            return jsonify({'error': 'Email is required'}), 400
+        if not password:
+            return jsonify({'error': 'Password is required'}), 400
+
+        doctor = Doctor.query.filter_by(email=identifier).first()
+        if not doctor or not doctor.check_password(password):
+            return jsonify({'error': 'Invalid email or password'}), 401
+
+        if doctor.status == 'pending':
+            return jsonify({'error': 'Your account is pending admin approval.'}), 403
+        if doctor.status == 'inactive':
+            return jsonify({'error': 'Your account has been deactivated. Contact admin.'}), 403
+
+        # ── DEV MODE: skip OTP ─────────────────────────────────
+        if DEV_MODE:
+            print("⚠️  DEV_MODE ON — skipping OTP")
+            access_token = create_access_token(
+                identity=str(doctor.id),
+                expires_delta=timedelta(days=7)
+            )
+            return jsonify({
+                'success':      True,
+                'access_token': access_token,
+                'doctor': {
+                    'id':        doctor.id,
+                    'name':      doctor.name,
+                    'email':     doctor.email,
+                    'phone':     doctor.phone,
+                    'specialty': doctor.specialty,
+                }
+            }), 200
+
+        # ── PRODUCTION: send OTP ───────────────────────────────
+        if not twilio_client:
+            return jsonify({'error': 'OTP service unavailable. Contact admin.'}), 503
+
+        twilio_client.verify.v2.services(SERVICE_SID) \
+            .verifications \
+            .create(to=doctor.email, channel='email')
+
+        return jsonify({
+            'success':    True,
+            'message':    'OTP sent via email',
+            'identifier': doctor.email,
+            'channel':    'email',
+        }), 200
+
+    except Exception as e:
+        print(f"ERROR in login: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ── VERIFY OTP ─────────────────────────────────────────────────────────────────
+@auth_bp.route('/api/auth/verify-otp', methods=['POST', 'OPTIONS'])
+def verify_otp():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    try:
+        data = request.get_json(force=True, silent=True)
+
+        identifier = (data.get('identifier') or '').strip()
+        code       = (data.get('code') or '').strip()
+
+        if not identifier or not code:
+            return jsonify({'error': 'Identifier and code are required'}), 400
+
+        if not twilio_client:
+            return jsonify({'error': 'OTP service unavailable'}), 503
+
+        result = twilio_client.verify.v2.services(SERVICE_SID) \
+            .verification_checks \
+            .create(to=identifier, code=code)
+
+        if result.status != 'approved':
+            return jsonify({'error': 'Invalid or expired code'}), 401
+
+        doctor = (
+            Doctor.query.filter_by(email=identifier).first()
+            if '@' in identifier
+            else Doctor.query.filter_by(phone=identifier).first()
+        )
         if not doctor:
-            return jsonify({'error': 'No pending email verification for this address'}), 400
-
-        EmailOTP.query.filter(EmailOTP.expires_at < datetime.utcnow()).delete()
-        db.session.commit()
-
-        entry = EmailOTP.query.filter_by(email=email, used=False).first()
-        if not entry:
-            return jsonify({'error': 'No OTP found — please restart signup'}), 400
-        if datetime.utcnow() > entry.expires_at:
-            db.session.delete(entry)
-            db.session.commit()
-            return jsonify({'error': 'Code has expired — please restart signup'}), 400
-        if code != entry.code:
-            return jsonify({'error': 'Incorrect code'}), 401
-
-        db.session.delete(entry)
-        doctor.status = 'pending'
-        db.session.commit()
-
-        send_welcome_email(doctor.email, doctor.name)
+            return jsonify({'error': 'Doctor not found'}), 404
 
         access_token = create_access_token(
             identity=str(doctor.id),
-            expires_delta=timedelta(minutes=30)
+            expires_delta=timedelta(days=7)
         )
-        resp = jsonify({
+        return jsonify({
             'success':      True,
             'access_token': access_token,
             'doctor': {
@@ -328,172 +200,8 @@ def verify_email_otp():
                 'phone':     doctor.phone,
                 'specialty': doctor.specialty,
             }
-        })
-        resp.set_cookie('access_token', access_token,
-                        httponly=True, secure=True, samesite='Lax', max_age=1800)
-        return resp, 201
-
-    except Exception as e:
-        db.session.rollback()
-        print(f"[VERIFY EMAIL OTP ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@auth_bp.route('/api/auth/login', methods=['POST', 'OPTIONS'])
-def login():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    try:
-        data       = request.get_json(force=True, silent=True)
-        identifier = (data.get('identifier') or '').strip()
-        password   = (data.get('password') or '').strip()
-
-        if not identifier or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
-
-        doctor = Doctor.query.filter_by(email=identifier).first()
-
-        if doctor and doctor.locked_until and doctor.locked_until > datetime.utcnow():
-            remaining = int((doctor.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
-            return jsonify({
-                'error': f'Account locked due to too many failed attempts. Try again in {remaining} minute(s).'
-            }), 429
-
-        if not doctor or not doctor.check_password(password):
-            if doctor:
-                doctor.failed_attempts = (doctor.failed_attempts or 0) + 1
-                if doctor.failed_attempts >= LOCKOUT_MAX_ATTEMPTS:
-                    doctor.locked_until = datetime.utcnow() + LOCKOUT_DURATION
-                    db.session.commit()
-                    return jsonify({
-                        'error': f'Account locked after {LOCKOUT_MAX_ATTEMPTS} failed attempts. Try again in 30 minutes.'
-                    }), 429
-                db.session.commit()
-                remaining_attempts = LOCKOUT_MAX_ATTEMPTS - doctor.failed_attempts
-                return jsonify({
-                    'error': f'Invalid email or password. {remaining_attempts} attempt(s) remaining before lockout.'
-                }), 401
-            return jsonify({'error': 'Invalid email or password'}), 401
-
-        if doctor.status == 'pending_otp':
-            return jsonify({'error': 'Please complete phone verification first'}), 403
-        if doctor.status == 'pending_email_otp':
-            return jsonify({'error': 'Please complete email verification first'}), 403
-        if doctor.status == 'pending':
-            return jsonify({'error': 'Your account is under review. You will be notified once approved by admin'}), 403
-        if doctor.status == 'rejected':
-            return jsonify({'error': 'Your registration was rejected. Please contact support'}), 403
-
-        doctor.failed_attempts = 0
-        doctor.locked_until    = None
-        doctor.last_login      = datetime.utcnow()
-        doctor.last_ip         = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
-        db.session.commit()
-
-        access_token = create_access_token(identity=str(doctor.id))
-        resp = jsonify({
-            'success': True,
-            'access_token': access_token,
-            'doctor': {
-                'id':        doctor.id,
-                'name':      doctor.name,
-                'email':     doctor.email,
-                'phone':     doctor.phone,
-                'specialty': doctor.specialty,
-            }
-        })
-        resp.set_cookie('access_token', access_token,
-                        httponly=True, secure=True, samesite='Lax', max_age=1800)
-        return resp, 200
-
-    except Exception as e:
-        print(f"[LOGIN ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ── Endpoint ناقص: /api/auth/send-phone-otp (alias لـ send-otp بـ method=sms) ──
-@auth_bp.route('/api/auth/send-phone-otp', methods=['POST', 'OPTIONS'])
-def send_phone_otp():
-    """Alias يُستخدم من الـ frontend في resendOtp"""
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    try:
-        data  = request.get_json(force=True, silent=True)
-        phone = normalize_phone((data.get('identifier') or data.get('phone') or '').strip())
-
-        if not phone:
-            return jsonify({'error': 'Phone number is required'}), 400
-
-        doctor = Doctor.query.filter_by(phone=phone).filter(
-            Doctor.status.in_(['pending_otp', 'pending_email_otp'])
-        ).first()
-        if not doctor:
-            return jsonify({'error': 'No pending registration for this phone number'}), 400
-
-        if is_dev_mode():
-            print(f"DEV_MODE -- SMS OTP for {phone} is 123456")
-        else:
-            get_twilio().verify.v2.services(SERVICE_SID) \
-                .verifications.create(to=phone, channel='sms')
-
-        return jsonify({'success': True, 'message': f'SMS OTP sent to {phone}'}), 200
-    except Exception as e:
-        print(f"[SEND PHONE OTP ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ── Endpoint ناقص: /api/auth/send-email-otp (resend email OTP) ──
-@auth_bp.route('/api/auth/send-email-otp', methods=['POST', 'OPTIONS'])
-def resend_email_otp():
-    """Resend email OTP — يُستخدم من resendEmailOtp في الـ frontend"""
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    try:
-        data  = request.get_json(force=True, silent=True)
-        email = (data.get('email') or '').strip().lower()
-
-        if not email:
-            return jsonify({'error': 'Email is required'}), 400
-
-        doctor = Doctor.query.filter_by(email=email, status='pending_email_otp').first()
-        if not doctor:
-            return jsonify({'error': 'No pending email verification for this address'}), 400
-
-        email_code = '654321' if is_dev_mode() else str(random.randint(100000, 999999))
-        EmailOTP.query.filter_by(email=email).delete()
-        db.session.add(EmailOTP(
-            email=email,
-            code=email_code,
-            expires_at=datetime.utcnow() + timedelta(minutes=15),
-        ))
-        db.session.commit()
-
-        if is_dev_mode():
-            print(f"DEV_MODE -- Email OTP for {email} is 654321")
-        else:
-            send_email_otp(email, doctor.name, email_code)
-
-        return jsonify({'success': True, 'message': f'Email OTP resent to {email}'}), 200
-    except Exception as e:
-        print(f"[RESEND EMAIL OTP ERROR] {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ── Endpoint ناقص: /api/auth/status ──
-@auth_bp.route('/api/auth/status', methods=['GET', 'OPTIONS'])
-def auth_status():
-    """يُستخدم من checkStatus في الـ frontend"""
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
-    try:
-        verify_jwt_in_request()
-        doctor_id = int(get_jwt_identity())
-        doctor    = Doctor.query.get(doctor_id)
-        if not doctor:
-            return jsonify({'authenticated': False}), 401
-        return jsonify({
-            'authenticated': True,
-            'doctor': doctor.to_dict()
         }), 200
-    except Exception:
-        return jsonify({'authenticated': False}), 401
+
+    except Exception as e:
+        print(f"ERROR in verify_otp: {e}")
+        return jsonify({'error': str(e)}), 500
