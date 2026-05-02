@@ -6,7 +6,7 @@ from app.models import db
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
-from app.routes.report import report_bp
+
 load_dotenv()
 
 
@@ -17,7 +17,8 @@ def create_app():
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY']                 = os.getenv('JWT_SECRET_KEY', 'super-secret-key')
+    # JWT_SECRET_KEY MUST be set in env — random fallback means all tokens invalidate on restart
+    app.config['JWT_SECRET_KEY']                 = os.getenv('JWT_SECRET_KEY') or os.urandom(32)
     app.config['SECRET_KEY']                     = os.getenv('SECRET_KEY', 'secret-key')
     app.config['JWT_ACCESS_TOKEN_EXPIRES']       = timedelta(minutes=30)
     app.config['MAX_CONTENT_LENGTH']             = 16 * 1024 * 1024
@@ -61,6 +62,7 @@ def create_app():
     from app.routes.admin           import admin_bp
     from app.routes.forgot_password import forgot_password_bp
     from app.routes.cases           import cases_bp
+    from app.routes.reports         import reports_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -71,7 +73,8 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(forgot_password_bp)
     app.register_blueprint(cases_bp)
-    app.register_blueprint(report_bp)
+    app.register_blueprint(reports_bp)
+
     @app.route('/api/health', methods=['GET'])
     def health():
         return jsonify({'status': 'ok', 'message': 'Diagnovate backend is running'}), 200

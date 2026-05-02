@@ -25,7 +25,10 @@ def get_cases():
         if status:
             query = query.filter(Case.status == status)
         if patient_id:
-            query = query.filter(Case.patient_id == int(patient_id))
+            patient = Patient.query.filter_by(patient_id=patient_id, doctor_id=doctor_id).first()
+            if not patient:
+                return jsonify({'success': True, 'data': []}), 200
+            query = query.filter(Case.patient_id == patient.id)
 
         cases = query.order_by(Case.created_at.desc()).all()
         return jsonify({'success': True, 'data': [c.to_dict() for c in cases]}), 200

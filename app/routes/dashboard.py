@@ -16,7 +16,10 @@ def get_stats():
         active_cases   = Case.query.filter_by(doctor_id=doctor_id, status='active').count()
         urgent_cases   = Case.query.filter(
             Case.doctor_id == doctor_id,
-            Case.bethesda_category.in_(['III', 'IV', 'V', 'VI'])
+            db.or_(
+                Case.tirads_score >= 4,
+                Case.bethesda_category.in_(['IV', 'V', 'VI'])
+            )
         ).count()
         total_patients = Patient.query.filter_by(doctor_id=doctor_id).count()
 

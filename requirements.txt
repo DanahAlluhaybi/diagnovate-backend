@@ -16,4 +16,8 @@ resend
 psycopg2-binary
 xgboost==2.0.3
 cloudinary
-replicate
+anthropic
+ultralytics
+timm
+torch
+torchvision

@@ -1,18 +1,12 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Doctor, Admin
+from app.routes.auth import _email_html_wrapper as _admin_email_html
 from datetime import datetime, date
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import traceback
 import os
 
 admin_bp = Blueprint('admin', __name__)
-
-# ✅ FIX: load from .env instead of hardcoding
-GMAIL_ADDRESS  = os.getenv("GMAIL_ADDRESS", "")
-GMAIL_APP_PASS = os.getenv("GMAIL_APP_PASS", "")
 
 REJECTION_REASONS = [
     "The provided information is incorrect or incomplete.",
@@ -20,20 +14,6 @@ REJECTION_REASONS = [
     "The stated specialty is not accepted on this platform.",
     "Other",
 ]
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────
-def _admin_email_html(content: str) -> str:
-    return f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff">
-  <div style="background:#0D9488;padding:24px 32px;border-radius:8px 8px 0 0">
-    <h1 style="color:white;margin:0;font-size:24px;letter-spacing:1px">Diagnovate</h1>
-  </div>
-  <div style="padding:40px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
-    {content}
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0">
-    <p style="color:#9ca3af;font-size:12px;margin:0">Diagnovate &mdash; AI-powered thyroid diagnosis platform.<br>If you have questions, please contact support.</p>
-  </div>
-</div>"""
 
 
 def send_email(to_email: str, subject: str, html_content: str):
@@ -198,7 +178,7 @@ def approve(user_id):
     <p style="color:#6b7280;margin:0 0 16px">Congratulations, Dr. {user.name}.</p>
     <p style="color:#6b7280;margin:0 0 32px">Your Diagnovate account has been reviewed and approved. You can now log in and start using the platform.</p>
     <div style="text-align:center">
-      <a href="https://diagnovate.org/login" style="background:#0D9488;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">Log In Now</a>
+      <a href="https://diagnovate.org/log-in?role=doctor" style="background:#0D9488;color:#ffffff;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;display:inline-block">Log In Now</a>
     </div>""")
         )
 
@@ -307,18 +287,6 @@ def debug_doctors():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
-
-@admin_bp.route('/api/admin/create-first-admin', methods=['POST'])
-def create_first_admin():
-    from app.models import Admin
-    if Admin.query.count() > 0:
-        return jsonify({'error': 'Admin already exists'}), 400
-    admin = Admin(name="Admin", email="admin@diagnovate.org")
-    admin.set_password("Admin@1234")
-    db.session.add(admin)
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'Admin created'})
 
 
 @admin_bp.route('/api/admin/change-password', methods=['POST'])

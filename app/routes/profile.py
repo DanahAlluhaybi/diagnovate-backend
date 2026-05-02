@@ -69,8 +69,8 @@ def update_profile():
                 return jsonify({'error': 'Current password is required'}), 400
             if not doctor.check_password(data['current_password']):
                 return jsonify({'error': 'Current password is incorrect'}), 401
-            if len(data['new_password']) < 6:
-                return jsonify({'error': 'New password must be at least 6 characters'}), 400
+            if len(data['new_password']) < 8:
+                return jsonify({'error': 'New password must be at least 8 characters'}), 400
             doctor.set_password(data['new_password'])
 
         db.session.commit()

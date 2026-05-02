@@ -42,14 +42,29 @@ def normalize_phone(phone):
     return phone
 
 def _email_html_wrapper(content: str) -> str:
-    return f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff">
-  <div style="background:#0D9488;padding:24px 32px;border-radius:8px 8px 0 0">
-    <h1 style="color:white;margin:0;font-size:24px;letter-spacing:1px">Diagnovate</h1>
+    return f"""<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9fafb">
+  <div style="background:#0D1117;padding:28px 40px;text-align:center">
+    <table role="presentation" style="margin:0 auto;border-collapse:collapse">
+      <tr>
+        <td style="padding-right:10px;vertical-align:middle">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="1" width="6" height="24" rx="2" fill="#0D9488"/>
+            <rect x="1" y="10" width="24" height="6" rx="2" fill="#0D9488"/>
+          </svg>
+        </td>
+        <td style="vertical-align:middle">
+          <span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:2px">Diagnovate</span>
+        </td>
+      </tr>
+    </table>
   </div>
-  <div style="padding:40px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+  <div style="background:#ffffff;padding:40px;color:#1f2937;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
     {content}
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0">
-    <p style="color:#9ca3af;font-size:12px;margin:0">Diagnovate &mdash; AI-powered thyroid diagnosis platform.<br>If you did not request this email, you can safely ignore it.</p>
+    <hr style="border:none;border-top:1px solid #f3f4f6;margin:32px 0">
+    <p style="color:#9ca3af;font-size:12px;margin:0;text-align:center">Diagnovate &mdash; AI-powered thyroid diagnosis platform.<br>If you did not request this email, you can safely ignore it.</p>
+  </div>
+  <div style="background:#f9fafb;padding:16px 40px;text-align:center;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+    <p style="color:#9ca3af;font-size:11px;margin:0">&copy; 2025 Diagnovate. All rights reserved.</p>
   </div>
 </div>"""
 
