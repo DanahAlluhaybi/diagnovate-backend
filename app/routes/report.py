@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.services.report_generation import generate_thyroid_report
+from app.services.report_generation import generate_report as _generate_report
 
 report_bp = Blueprint('report', __name__)
 
@@ -36,7 +36,7 @@ def generate_report():
                 'missing_fields': missing
             }), 422
 
-        report = generate_thyroid_report(data)
+        report = _generate_report(data)
         return jsonify({'success': True, 'report': report}), 200
 
     except Exception as e:
