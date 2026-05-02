@@ -28,7 +28,7 @@ cloudinary.config(
     api_secret = os.environ.get("CLOUDINARY_API_SECRET", ""),
 )
 
-MAX_INPUT_PX = 512
+MAX_INPUT_PX = 256
 
 
 def cap_size(img: Image.Image, max_px: int = MAX_INPUT_PX) -> Image.Image:
