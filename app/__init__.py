@@ -65,5 +65,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         print("✅ Database ready.")
+        from app.ml import load_ml_artifacts
+        load_ml_artifacts()
 
     return app

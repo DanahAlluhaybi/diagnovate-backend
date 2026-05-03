@@ -1,118 +1,49 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
-import joblib
 import numpy as np
 import os
 
 diagnosis_bp = Blueprint('diagnosis', __name__)
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'ml')
 
-try:
-    model           = joblib.load(os.path.join(MODEL_DIR, 'thyroid_model.pkl'))
-    label_encoders  = joblib.load(os.path.join(MODEL_DIR, 'label_encoders.pkl'))
-    feature_columns = joblib.load(os.path.join(MODEL_DIR, 'feature_columns.pkl'))
-    model_name      = type(model).__name__
-    print(f"✅ Thyroid model loaded: {model_name}")
-except Exception as e:
-    model           = None
-    label_encoders  = {}
-    feature_columns = []
-    model_name      = 'Unknown'
-    print(f"⚠️ Could not load model: {e}")
-
-
-# ── PREDICT ────────────────────────────────────────────────────────────────────
+# ── PREDICT — Lab Data (3 Models
 @diagnosis_bp.route('/api/diagnosis/predict', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def predict():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
-    if model is None:
-        return jsonify({'error': 'Model not loaded. Please train the model first.'}), 500
-
     try:
+        from app.ml import predict_lab, xgb_model
+
+        if xgb_model is None:
+            return jsonify({'error': 'Models not loaded'}), 500
+
         data = request.get_json(force=True, silent=True)
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        # ── Build input vector ─────────────────────────────────
-        # FIX: null values → default 0.0 instead of rejecting the whole request
-        input_values = []
-        for col in feature_columns:
-            val = data.get(col)
-            if val is None:
-                input_values.append(0.0)
-            else:
-                if col in label_encoders:
-                    try:
-                        val = label_encoders[col].transform([str(val)])[0]
-                    except Exception:
-                        val = 0
-                try:
-                    input_values.append(float(val))
-                except (TypeError, ValueError):
-                    input_values.append(0.0)
+        result = predict_lab(data)
 
-        input_array = np.array([input_values])
-        prediction  = model.predict(input_array)[0]
-        probability = model.predict_proba(input_array)[0]
-
-        # ── Decode label ───────────────────────────────────────
-        target_encoder = (
-            label_encoders.get('target')
-            or label_encoders.get('diagnosis')
-            or label_encoders.get('class')
-        )
-
-        label = (
-            target_encoder.inverse_transform([int(prediction)])[0]
-            if target_encoder
-            else str(prediction)
-        )
-
-        # ── Classify severity ──────────────────────────────────
-        label_lower = str(label).lower()
-        if 'negative' in label_lower or 'normal' in label_lower or label_lower == '0':
-            status   = 'Normal'
-            severity = 'low'
-        elif 'hypo' in label_lower:
-            status   = 'Hypothyroidism'
-            severity = 'high'
-        elif 'hyper' in label_lower:
-            status   = 'Hyperthyroidism'
-            severity = 'high'
-        else:
-            status   = label
-            severity = 'medium'
-
-        confidence = round(float(max(probability)) * 100, 2)
-
-        # Build probability map with class names if available
-        if target_encoder and hasattr(target_encoder, 'classes_'):
-            prob_map = {
-                str(cls): round(float(p) * 100, 2)
-                for cls, p in zip(target_encoder.classes_, probability)
-            }
-        else:
-            prob_map = {
-                str(i): round(float(p) * 100, 2)
-                for i, p in enumerate(probability)
-            }
+        majority = result['majority_result']
+        severity = 'high' if majority == 'Malignant' else 'low'
 
         return jsonify({
-            'success':       True,
-            'diagnosis':     status,
-            'raw_label':     label,
-            'confidence':    confidence,
-            'severity':      severity,
-            'model_used':    model_name,   # FIX: added model_used so frontend can display real model
-            'probabilities': prob_map,
+            'success'      : True,
+            'diagnosis'    : majority,
+            'raw_label'    : majority,
+            'confidence'   : result['confidence'],
+            'severity'     : severity,
+            'model_used'   : 'XGBoost + CatBoost + RandomForest',
+            'probabilities': {
+                'Benign'   : round(100 - result['confidence'], 1),
+                'Malignant': round(result['confidence'], 1),
+            },
+            'models'       : result['models'],
         }), 200
 
     except Exception as e:
-        print(f"ERROR in predict: {e}")
+        print("ERROR in predict: " + str(e))
         return jsonify({'error': str(e)}), 500
 
 
@@ -120,15 +51,15 @@ def predict():
 @diagnosis_bp.route('/api/diagnosis/fields', methods=['GET'])
 @jwt_required()
 def get_fields():
-    if model is None:
-        return jsonify({'error': 'Model not loaded'}), 500
+    from app.ml import feature_columns
     return jsonify({
-        'success':         True,
+        'success'        : True,
         'required_fields': feature_columns,
-        'model_name':      model_name,
+        'model_name'     : 'XGBoost + CatBoost + RandomForest',
     }), 200
 
-# ── ULTRASOUND IMAGE DIAGNOSIS ─────────────────────────────────────────────────
+
+# ── ULTRASOUND IMAGE DIAGNOSIS
 @diagnosis_bp.route('/api/diagnosis/ultrasound', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def predict_ultrasound():
@@ -160,9 +91,9 @@ def predict_ultrasound():
         var_score    = min(std_val / 80.0, 1.0)
         noise_offset = (img_hash % 200 - 100) / 1000.0
 
-        malignant_prob = round(min(max((base_score * 0.5 + var_score * 0.5 + noise_offset) * 100, 5.0), 95.0), 1)
-        benign_prob    = round(100.0 - malignant_prob, 1)
-        det_confidence = round(min(60.0 + std_val / 4.0, 95.0), 1)
+        malignant_prob  = round(min(max((base_score * 0.5 + var_score * 0.5 + noise_offset) * 100, 5.0), 95.0), 1)
+        benign_prob     = round(100.0 - malignant_prob, 1)
+        det_confidence  = round(min(60.0 + std_val / 4.0, 95.0), 1)
         nodule_detected = std_val > 20.0
 
         if malignant_prob >= 70:
@@ -179,18 +110,18 @@ def predict_ultrasound():
             follow_up      = '12 months'
 
         return jsonify({
-            'success':               True,
-            'nodule_detected':       nodule_detected,
-            'detection_confidence':  det_confidence,
-            'benign_probability':    benign_prob,
+            'success'              : True,
+            'nodule_detected'      : nodule_detected,
+            'detection_confidence' : det_confidence,
+            'benign_probability'   : benign_prob,
             'malignant_probability': malignant_prob,
-            'risk_level':            risk_level,
-            'recommendation':        recommendation,
-            'follow_up':             follow_up,
-            'bbox':                  None,
-            'note':                  'Placeholder — integrate YOLO/EfficientNet for production.',
+            'risk_level'           : risk_level,
+            'recommendation'       : recommendation,
+            'follow_up'            : follow_up,
+            'bbox'                 : None,
+            'note'                 : 'Placeholder — integrate YOLO/EfficientNet for production.',
         }), 200
 
     except Exception as e:
-        print(f"ERROR in predict_ultrasound: {e}")
+        print("ERROR in predict_ultrasound: " + str(e))
         return jsonify({'error': str(e), 'success': False}), 500
