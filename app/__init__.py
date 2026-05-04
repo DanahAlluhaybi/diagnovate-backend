@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import os as _os
+print(f"[startup] PORT env var = {_os.getenv('PORT', 'NOT SET')}")
+print(f"[startup] DATABASE_URL = {_os.getenv('DATABASE_URL', 'NOT SET')[:30]}...")
+
 
 def create_app():
     app = Flask(__name__)
