@@ -17,6 +17,7 @@ REJECTION_REASONS = [
 
 
 def send_email(to_email: str, subject: str, html_content: str):
+    """Send a transactional email via Resend. Logs failures without raising."""
     try:
         import resend
         resend.api_key = os.getenv("RESEND_API_KEY", "").strip()
@@ -32,9 +33,9 @@ def send_email(to_email: str, subject: str, html_content: str):
 
 
 def get_admin_or_error():
+    """Resolve the JWT identity to an Admin record, returning (admin, None) or (None, error_response)."""
     try:
         admin_id = get_jwt_identity()
-        # ✅ FIX: check if it's an admin or a doctor calling admin endpoints
         admin = Admin.query.get(int(admin_id))
         if not admin:
             return None, (jsonify({'error': 'Admin not found or unauthorized'}), 403)
@@ -44,7 +45,6 @@ def get_admin_or_error():
         return None, (jsonify({'error': str(e)}), 500)
 
 
-# ── Admin Login ───────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/login', methods=['POST', 'OPTIONS'])
 def admin_login():
     if request.method == 'OPTIONS':
@@ -79,14 +79,12 @@ def admin_login():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Rejection Reasons ─────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/rejection-reasons', methods=['GET'])
 @jwt_required()
 def get_rejection_reasons():
     return jsonify(REJECTION_REASONS)
 
 
-# ── Stats ─────────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/stats', methods=['GET'])
 @jwt_required()
 def get_stats():
@@ -110,7 +108,6 @@ def get_stats():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Pending Users ─────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/pending-users', methods=['GET'])
 @jwt_required()
 def get_pending():
@@ -134,7 +131,6 @@ def get_pending():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Active Users ──────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/active-users', methods=['GET'])
 @jwt_required()
 def get_active():
@@ -157,7 +153,6 @@ def get_active():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Approve ───────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/approve/<int:user_id>', methods=['POST'])
 @jwt_required()
 def approve(user_id):
@@ -189,7 +184,6 @@ def approve(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── Reject ────────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/reject/<int:user_id>', methods=['POST'])
 @jwt_required()
 def reject(user_id):
@@ -229,7 +223,6 @@ def reject(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── Activate ──────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/activate/<int:user_id>', methods=['POST'])
 @jwt_required()
 def activate(user_id):
@@ -247,7 +240,6 @@ def activate(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── Deactivate ────────────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/deactivate/<int:user_id>', methods=['POST'])
 @jwt_required()
 def deactivate(user_id):
@@ -265,7 +257,6 @@ def deactivate(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── Debug: All Doctors ────────────────────────────────────────────────────
 @admin_bp.route('/api/admin/debug/doctors', methods=['GET'])
 @jwt_required()
 def debug_doctors():
@@ -296,9 +287,9 @@ def change_password():
         admin, err = get_admin_or_error()
         if err:
             return err
-        data = request.get_json(force=True, silent=True) or {}
+        data             = request.get_json(force=True, silent=True) or {}
         current_password = data.get('current_password', '')
-        new_password = data.get('new_password', '')
+        new_password     = data.get('new_password', '')
         if not current_password or not new_password:
             return jsonify({'error': 'Current and new password are required'}), 400
         if len(new_password) < 6:
