@@ -23,6 +23,10 @@ def create_app():
 
     allowed_origins = os.getenv('ALLOWED_ORIGINS', '*')
 
+    @app.route('/health')
+    def health():
+        return jsonify({'status': 'ok', 'message': 'Diagnovate API is running'}), 200
+
     @app.route('/api/<path:path>', methods=['OPTIONS'])
     def options_handler(path=None):
         return jsonify({}), 200
