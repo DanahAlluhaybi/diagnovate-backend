@@ -15,10 +15,7 @@ xgboost==2.0.3
 catboost==1.2.10
 opencv-python-headless>=4.9.0.80
 Pillow>=10.3.0
-torch==2.2.2+cpu
-torchvision==0.17.2+cpu
 anthropic>=0.28.0
 cloudinary==1.40.0
 replicate==0.25.1
-timm==0.9.16
 gunicorn==21.2.0
