@@ -1,2 +1,12 @@
 [phases.setup]
-nixPkgs = ["libxcb"]
+nixPkgs = ["libxcb", "libGL", "glib"]
+
+[phases.install]
+cmds = [
+  "pip install --upgrade pip",
+  "pip install torch==2.2.2+cpu torchvision==0.17.2+cpu --index-url https://download.pytorch.org/whl/cpu",
+  "pip install -r requirements.txt --ignore-installed torch torchvision"
+]
+
+[start]
+cmd = "gunicorn 'app:create_app()' --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --preload"
