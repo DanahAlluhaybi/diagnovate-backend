@@ -5,7 +5,7 @@ flask-jwt-extended==4.5.3
 flask-cors==4.0.0
 python-dotenv==1.0.0
 werkzeug==2.3.7
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 twilio==8.10.0
 resend==0.7.2
 numpy>=1.26.4,<2.0

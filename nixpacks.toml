@@ -1,6 +1,9 @@
 [phases.setup]
 nixPkgs = ["libxcb", "libGL", "glib"]
 
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.11"
+
 [phases.install]
 cmds = [
   "pip install --upgrade pip",
