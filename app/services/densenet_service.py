@@ -29,12 +29,13 @@ def _build_densenet(num_classes: int = 2) -> nn.Module:
     in_features = model.classifier.in_features  # 1024
     model.classifier = nn.Sequential(
         nn.Linear(in_features, 512),
+        nn.BatchNorm1d(512),
         nn.ReLU(inplace=True),
-        nn.Dropout(p=0.4),
-        nn.Linear(512, 256),
+        nn.Dropout(0.3),
+        nn.Linear(512, 128),
         nn.ReLU(inplace=True),
-        nn.Dropout(p=0.3),
-        nn.Linear(256, num_classes),
+        nn.Dropout(0.2),
+        nn.Linear(128, num_classes),
     )
     return model
 
