@@ -1,5 +1,3 @@
-# app/ml/__init__.py
-
 import os
 import numpy as np
 import pandas as pd
@@ -58,20 +56,17 @@ def load_ml_artifacts() -> None:
 
 
 def _conf(prob: float, pred: str) -> float:
-    """confidence للـclass المتوقع وليس malignant دائماً"""
     return round(prob * 100, 1) if pred == "Malignant" else round((1 - prob) * 100, 1)
 
 
-def _build_row(patient_data: dict, feature_columns: List[str]) -> dict:
-    """تحويل بيانات المريض إلى row يطابق feature columns"""
-
+def _build_row(patient_data: dict, cols: List[str]) -> dict:
     def _get(*keys, default=0):
         for k in keys:
             if k in patient_data:
                 return patient_data[k]
         return default
 
-    row = {col: 0 for col in feature_columns}
+    row = {col: 0 for col in cols}
     row['Age']                  = _get('Age', 'age', default=0)
     row['Gender']               = 1 if str(
         patient_data.get('sex', patient_data.get('gender', 'M'))
@@ -94,7 +89,6 @@ def _build_row(patient_data: dict, feature_columns: List[str]) -> dict:
 
 
 def _prepare_input(patient_data: dict) -> Any:
-    """تجهيز الـinput للنماذج"""
     row = _build_row(patient_data, feature_columns)
     df  = pd.DataFrame([row])
     for col in feature_columns:
@@ -103,10 +97,6 @@ def _prepare_input(patient_data: dict) -> Any:
 
 
 def predict_lab(patient_data: dict) -> dict:
-    """
-    Majority voting بين الثلاث نماذج.
-    يُستدعى لما المستخدم يختار 'Majority Voting'.
-    """
     if not ml_ready:
         raise RuntimeError("ML models not loaded")
 
@@ -126,7 +116,6 @@ def predict_lab(patient_data: dict) -> dict:
         else "Benign"
     )
 
-    # confidence الكلي = متوسط النماذج اللي وافقت الأغلبية فقط
     majority_probs = []
     if xgb_pred == majority:
         majority_probs.append(xgb_prob if majority == "Malignant" else 1 - xgb_prob)
@@ -137,10 +126,14 @@ def predict_lab(patient_data: dict) -> dict:
 
     overall_confidence = round(sum(majority_probs) / len(majority_probs) * 100, 1)
 
+    avg_mal_prob = round((xgb_prob + cat_prob + rf_prob) / 3 * 100, 1)
+
     return {
         "majority_result": majority,
         "confidence":      overall_confidence,
         "selected_model":  "Majority Voting",
+        "malignant_prob":  avg_mal_prob,
+        "benign_prob":     round(100 - avg_mal_prob, 1),
         "models": {
             "XGBoost":       {"result": xgb_pred, "confidence": _conf(xgb_prob, xgb_pred)},
             "CatBoost":      {"result": cat_pred,  "confidence": _conf(cat_prob,  cat_pred)},
@@ -150,10 +143,6 @@ def predict_lab(patient_data: dict) -> dict:
 
 
 def predict_lab_single(patient_data: dict, model_name: str) -> dict:
-    """
-    تشغيل نموذج واحد محدد فقط.
-    يُستدعى لما المستخدم يختار XGBoost أو CatBoost أو Random Forest.
-    """
     if not ml_ready:
         raise RuntimeError("ML models not loaded")
 
@@ -164,20 +153,6 @@ def predict_lab_single(patient_data: dict, model_name: str) -> dict:
         "rf":            rf_model,
     }
 
-    key = model_name.lower().strip()
-    selected = model_map.get(key)
-    if selected is None:
-        raise ValueError(
-            f"Unknown model '{model_name}'. "
-            f"Valid options: XGBoost, CatBoost, Random Forest"
-        )
-
-    X    = _prepare_input(patient_data)
-    prob = float(selected.predict_proba(X)[0][1])
-    pred = "Malignant" if prob >= threshold else "Benign"
-    conf = _conf(prob, pred)
-
-    # اسم النموذج للعرض
     display_names = {
         "xgboost":       "XGBoost",
         "catboost":      "CatBoost",
@@ -185,13 +160,25 @@ def predict_lab_single(patient_data: dict, model_name: str) -> dict:
         "rf":            "Random Forest",
     }
 
+    key = model_name.lower().strip()
+    selected = model_map.get(key)
+    if selected is None:
+        raise ValueError(
+            f"Unknown model '{model_name}'. Valid: XGBoost, CatBoost, Random Forest"
+        )
+
+    X    = _prepare_input(patient_data)
+    prob = float(selected.predict_proba(X)[0][1])
+    pred = "Malignant" if prob >= threshold else "Benign"
+    conf = _conf(prob, pred)
+
     return {
         "majority_result": pred,
         "confidence":      conf,
         "selected_model":  display_names[key],
+        "malignant_prob":  round(prob * 100, 1),
+        "benign_prob":     round((1 - prob) * 100, 1),
         "models": {
             display_names[key]: {"result": pred, "confidence": conf}
         },
-        "malignant_prob": round(prob * 100, 1),
-        "benign_prob":    round((1 - prob) * 100, 1),
     }

@@ -1,7 +1,7 @@
 """
 app/routes/diagnosis.py
 Diagnosis Routes:
-    POST /api/diagnosis/predict          — Lab data ensemble (XGBoost+CatBoost+RF)
+    POST /api/diagnosis/predict          — Lab data (Majority Voting or single model)
     POST /api/diagnosis/predict-image    — Ultrasound Voting (Swin + DenseNet + EfficientNet)
     GET  /api/diagnosis/fields           — Required lab fields
     GET  /api/diagnosis/health           — Model load status
@@ -17,10 +17,8 @@ from app.services.efficientnet_yolo_service import is_efficientnet_yolo_loaded
 
 diagnosis_bp = Blueprint('diagnosis', __name__)
 
+MAJORITY_ALIASES = {'majority voting', 'majority', 'voting', 'ensemble', ''}
 
-# ════════════════════════════════════════════════════════════════════════════
-# Lab Data Prediction — XGBoost + CatBoost + RandomForest ensemble
-# ════════════════════════════════════════════════════════════════════════════
 
 @diagnosis_bp.route('/api/diagnosis/predict', methods=['POST', 'OPTIONS'])
 @jwt_required()
@@ -29,7 +27,7 @@ def predict():
         return jsonify({}), 200
 
     try:
-        from app.ml import predict_lab, xgb_model
+        from app.ml import predict_lab, predict_lab_single, xgb_model
 
         if xgb_model is None:
             return jsonify({'error': 'Models not loaded'}), 500
@@ -38,33 +36,43 @@ def predict():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        result = predict_lab(data)
+        selected_model = (
+            data.pop('model', None)
+            or data.pop('selected_model', None)
+            or 'majority voting'
+        ).strip().lower()
 
-        majority = result['majority_result']
-        severity = 'high' if majority == 'Malignant' else 'low'
+        if selected_model in MAJORITY_ALIASES:
+            result = predict_lab(data)
+        else:
+            result = predict_lab_single(data, selected_model)
+
+        majority  = result['majority_result']
+        severity  = 'high' if majority == 'Malignant' else 'low'
+        mal_prob  = result['malignant_prob']
+        ben_prob  = result['benign_prob']
 
         return jsonify({
-            'success'      : True,
-            'diagnosis'    : majority,
-            'raw_label'    : majority,
-            'confidence'   : result['confidence'],
-            'severity'     : severity,
-            'model_used'   : 'XGBoost + CatBoost + RandomForest',
-            'probabilities': {
-                'Benign'   : round(100 - result['confidence'], 1),
-                'Malignant': round(result['confidence'], 1),
+            'success'       : True,
+            'diagnosis'     : majority,
+            'raw_label'     : majority,
+            'confidence'    : result['confidence'],
+            'severity'      : severity,
+            'selected_model': result['selected_model'],
+            'model_used'    : result['selected_model'],
+            'probabilities' : {
+                'Benign'   : ben_prob,
+                'Malignant': mal_prob,
             },
-            'models'       : result['models'],
+            'models'        : result['models'],
         }), 200
 
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         print(f"ERROR /api/diagnosis/predict: {e}")
         return jsonify({'error': str(e)}), 500
 
-
-# ════════════════════════════════════════════════════════════════════════════
-# Lab Fields
-# ════════════════════════════════════════════════════════════════════════════
 
 @diagnosis_bp.route('/api/diagnosis/fields', methods=['GET'])
 @jwt_required()
@@ -76,10 +84,6 @@ def get_fields():
         'model_name'     : 'XGBoost + CatBoost + RandomForest',
     }), 200
 
-
-# ════════════════════════════════════════════════════════════════════════════
-# Ultrasound Image Prediction — Majority Voting
-# ════════════════════════════════════════════════════════════════════════════
 
 @diagnosis_bp.route('/api/diagnosis/predict-image', methods=['POST', 'OPTIONS'])
 @jwt_required()
@@ -134,16 +138,12 @@ def predict_image():
     }), 200
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# Health Check
-# ════════════════════════════════════════════════════════════════════════════
-
 @diagnosis_bp.route('/api/diagnosis/health', methods=['GET'])
 def health_check():
     from app.ml import xgb_model
     return jsonify({
-        'lab_model':          xgb_model is not None,
-        'swin':               is_swin_loaded(),
-        'densenet':           is_densenet_loaded(),
-        'efficientnet_yolo':  is_efficientnet_yolo_loaded(),
+        'lab_model'        : xgb_model is not None,
+        'swin'             : is_swin_loaded(),
+        'densenet'         : is_densenet_loaded(),
+        'efficientnet_yolo': is_efficientnet_yolo_loaded(),
     }), 200
