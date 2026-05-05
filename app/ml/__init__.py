@@ -66,7 +66,7 @@ def predict_lab(patient_data: dict) -> dict:
         return default
 
     row['Age']                  = _get('Age', 'age', default=0)
-    row['Gender']               = _get('Gender', 'gender', 'sex', default=0)
+    row['Gender']               = 1 if str(patient_data.get('sex', patient_data.get('gender', 'M'))).upper() in ['F', 'FEMALE'] else 0
     row['Smoking']              = _get('Smoking', 'smoking', default=0)
     row['Hx Smoking']           = _get('Hx Smoking', 'hx_smoking', 'hxSmoking', default=0)
     row['Hx Radiothreapy']      = _get('Hx Radiothreapy', 'hx_radiotherapy', 'hxRadiotherapy', default=0)
@@ -83,6 +83,8 @@ def predict_lab(patient_data: dict) -> dict:
     row['Response']             = _get('Response', 'response', default=0)
 
     df = pd.DataFrame([row])
+    for col in feature_columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     X  = imputer.transform(df)
 
     xgb_prob = xgb_model.predict_proba(X)[0][1]
