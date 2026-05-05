@@ -110,6 +110,25 @@ def predict_image():
     except Exception as e:
         return jsonify({'error': f'Could not read image: {e}'}), 400
 
+    MAX_SIZE = 20 * 1024 * 1024  # 20MB
+    if len(image_bytes) > MAX_SIZE:
+        return jsonify({'error': 'File too large. Maximum size is 20MB.'}), 400
+
+    if len(image_bytes) < 100:
+        return jsonify({'error': 'File too small or empty.'}), 400
+
+    # Validate magic bytes
+    magic = image_bytes[:8]
+    valid_signatures = [
+        b'\xff\xd8\xff',           # JPEG
+        b'\x89PNG\r\n\x1a\n',     # PNG
+        b'RIFF',                   # WEBP
+        b'BM',                     # BMP
+        b'II*\x00', b'MM\x00*',   # TIFF
+    ]
+    if not any(magic.startswith(sig) for sig in valid_signatures):
+        return jsonify({'error': 'Invalid image file.'}), 400
+
     try:
         result = run_ultrasound_voting(image_bytes=image_bytes)
     except Exception as e:
