@@ -23,7 +23,8 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY']           = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
     app.config['SECRET_KEY']               = os.getenv('SECRET_KEY', 'flask-secret-key-change-in-production')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+    app.config['JWT_ACCESS_TOKEN_EXPIRES']  = timedelta(days=7)
+    app.config['MAX_CONTENT_LENGTH']        = 16 * 1024 * 1024   # 16 MB max upload
 
     allowed_origins = os.getenv('ALLOWED_ORIGINS', '*')
 
@@ -78,4 +79,26 @@ def create_app():
         except Exception as e:
             print(f"⚠️  ML artifacts failed: {e} — app will start without ML.")
 
+        def _preload_ml():
+            print("\n🔄 Preloading ML models...")
+            try:
+                from app.services.swin_service import preload_swin
+                preload_swin()
+            except Exception as e:
+                print(f"⚠️  Swin preload skipped: {e}")
+            try:
+                from app.services.densenet_service import preload_densenet
+                preload_densenet()
+            except Exception as e:
+                print(f"⚠️  DenseNet preload skipped: {e}")
+            try:
+                from app.services.efficientnet_yolo_service import preload_efficientnet_yolo
+                preload_efficientnet_yolo()
+            except Exception as e:
+                print(f"⚠️  EfficientNet+YOLO preload skipped: {e}")
+            print("✅ ML preload complete\n")
+
+        _preload_ml()
+
     return app
+

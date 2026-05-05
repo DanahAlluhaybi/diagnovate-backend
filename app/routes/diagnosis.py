@@ -1,12 +1,27 @@
+"""
+app/routes/diagnosis.py
+Diagnosis Routes:
+    POST /api/diagnosis/predict          — Lab data ensemble (XGBoost+CatBoost+RF)
+    POST /api/diagnosis/predict-image    — Ultrasound Voting (Swin + DenseNet + EfficientNet)
+    GET  /api/diagnosis/fields           — Required lab fields
+    GET  /api/diagnosis/health           — Model load status
+"""
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
-import numpy as np
-import os
+
+from app.services.ultrasound_voting         import run_ultrasound_voting
+from app.services.swin_service              import is_swin_loaded
+from app.services.densenet_service          import is_densenet_loaded
+from app.services.efficientnet_yolo_service import is_efficientnet_yolo_loaded
 
 diagnosis_bp = Blueprint('diagnosis', __name__)
 
 
-# ── PREDICT — Lab Data (3 Models
+# ════════════════════════════════════════════════════════════════════════════
+# Lab Data Prediction — XGBoost + CatBoost + RandomForest ensemble
+# ════════════════════════════════════════════════════════════════════════════
+
 @diagnosis_bp.route('/api/diagnosis/predict', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def predict():
@@ -43,11 +58,14 @@ def predict():
         }), 200
 
     except Exception as e:
-        print("ERROR in predict: " + str(e))
+        print(f"ERROR /api/diagnosis/predict: {e}")
         return jsonify({'error': str(e)}), 500
 
 
-# ── GET required fields ────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# Lab Fields
+# ════════════════════════════════════════════════════════════════════════════
+
 @diagnosis_bp.route('/api/diagnosis/fields', methods=['GET'])
 @jwt_required()
 def get_fields():
@@ -59,69 +77,73 @@ def get_fields():
     }), 200
 
 
-# ── ULTRASOUND IMAGE DIAGNOSIS
-@diagnosis_bp.route('/api/diagnosis/ultrasound', methods=['POST', 'OPTIONS'])
+# ════════════════════════════════════════════════════════════════════════════
+# Ultrasound Image Prediction — Majority Voting
+# ════════════════════════════════════════════════════════════════════════════
+
+@diagnosis_bp.route('/api/diagnosis/predict-image', methods=['POST', 'OPTIONS'])
 @jwt_required()
-def predict_ultrasound():
+def predict_image():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
     if 'image' not in request.files:
-        return jsonify({'error': 'No image file provided', 'success': False}), 400
+        return jsonify({'error': 'No image provided. Send multipart field "image".'}), 400
 
     file = request.files['image']
-    if not file or not file.filename:
-        return jsonify({'error': 'Empty file', 'success': False}), 400
+    if not file or file.filename == '':
+        return jsonify({'error': 'Empty file.'}), 400
+
+    allowed = {'image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff'}
+    if file.content_type not in allowed:
+        return jsonify({'error': f'Unsupported type: {file.content_type}'}), 400
 
     try:
-        import io
-        import hashlib
-        from PIL import Image
-        import numpy as np
-
-        raw      = file.read()
-        img      = Image.open(io.BytesIO(raw)).convert('RGB')
-        arr      = np.array(img).astype(np.float32)
-
-        img_hash     = int(hashlib.md5(raw).hexdigest()[:8], 16)
-        mean_val     = float(arr.mean())
-        std_val      = float(arr.std())
-
-        base_score   = (255.0 - mean_val) / 255.0
-        var_score    = min(std_val / 80.0, 1.0)
-        noise_offset = (img_hash % 200 - 100) / 1000.0
-
-        malignant_prob  = round(min(max((base_score * 0.5 + var_score * 0.5 + noise_offset) * 100, 5.0), 95.0), 1)
-        benign_prob     = round(100.0 - malignant_prob, 1)
-        det_confidence  = round(min(60.0 + std_val / 4.0, 95.0), 1)
-        nodule_detected = std_val > 20.0
-
-        if malignant_prob >= 70:
-            risk_level     = 'high'
-            recommendation = 'High malignancy risk. Recommend urgent FNAB and specialist consultation.'
-            follow_up      = 'Urgent — within 2 weeks'
-        elif malignant_prob >= 40:
-            risk_level     = 'intermediate'
-            recommendation = 'Intermediate risk. Recommend FNAB and follow-up ultrasound in 3–6 months.'
-            follow_up      = '3–6 months'
-        else:
-            risk_level     = 'low'
-            recommendation = 'Low malignancy risk. Routine follow-up ultrasound in 12 months.'
-            follow_up      = '12 months'
-
-        return jsonify({
-            'success'              : True,
-            'nodule_detected'      : nodule_detected,
-            'detection_confidence' : det_confidence,
-            'benign_probability'   : benign_prob,
-            'malignant_probability': malignant_prob,
-            'risk_level'           : risk_level,
-            'recommendation'       : recommendation,
-            'follow_up'            : follow_up,
-            'bbox'                 : None,
-            'note'                 : 'Placeholder — integrate YOLO/EfficientNet for production.',
-        }), 200
-
+        image_bytes = file.read()
     except Exception as e:
-        print("ERROR in predict_ultrasound: " + str(e))
-        return jsonify({'error': str(e), 'success': False}), 500
+        return jsonify({'error': f'Could not read image: {e}'}), 400
+
+    try:
+        result = run_ultrasound_voting(image_bytes=image_bytes)
+    except Exception as e:
+        print(f"ERROR /api/diagnosis/predict-image: {e}")
+        return jsonify({'error': f'Voting failed: {str(e)}'}), 500
+
+    final    = result["final_prediction"]
+    severity = {"Malignant": "high", "Benign": "low"}.get(final, "medium")
+
+    rec_map = {
+        "Malignant":    ("Malignant thyroid nodule detected. Immediate referral to an endocrine "
+                         "surgeon is recommended. Consider FNAB for histological confirmation."),
+        "Benign":       ("Nodule appears benign. Routine ultrasound follow-up in 6-12 months "
+                         "is recommended to monitor for any changes."),
+        "Inconclusive": "Models returned inconclusive results. Manual specialist review required.",
+    }
+
+    return jsonify({
+        'success'       : True,
+        'diagnosis'     : final,
+        'severity'      : severity,
+        'confidence'    : result["confidence_score"],
+        'vote_summary'  : result["vote_summary"],
+        'unanimous'     : result["unanimous"],
+        'recommendation': rec_map.get(final, "Consult a specialist."),
+        'models_detail' : result["models"],
+        'errors'        : result.get("errors"),
+        'disclaimer'    : result["disclaimer"],
+    }), 200
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Health Check
+# ════════════════════════════════════════════════════════════════════════════
+
+@diagnosis_bp.route('/api/diagnosis/health', methods=['GET'])
+def health_check():
+    from app.ml import xgb_model
+    return jsonify({
+        'lab_model':          xgb_model is not None,
+        'swin':               is_swin_loaded(),
+        'densenet':           is_densenet_loaded(),
+        'efficientnet_yolo':  is_efficientnet_yolo_loaded(),
+    }), 200

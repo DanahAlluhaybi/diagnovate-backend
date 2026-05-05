@@ -11,7 +11,9 @@
       "Bash(.venv\\\\Scripts\\\\python.exe retrain.py)",
       "Bash(python retrain.py)",
       "Bash(py retrain.py)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\danny\\\\PycharmProjects\\\\diagnovate-backend\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }

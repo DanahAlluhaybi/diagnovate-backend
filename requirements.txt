@@ -21,3 +21,4 @@ replicate==0.25.1
 gunicorn==21.2.0
 timm==1.0.3
 huggingface_hub>=0.23.0
+ultralytics>=8.0.0
