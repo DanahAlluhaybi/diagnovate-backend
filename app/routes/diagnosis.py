@@ -129,8 +129,9 @@ def predict_image():
     if not any(magic.startswith(sig) for sig in valid_signatures):
         return jsonify({'error': 'Invalid image file.'}), 400
 
+    selected_model = request.form.get('model', 'majority').strip()
     try:
-        result = run_ultrasound_voting(image_bytes=image_bytes)
+        result = run_ultrasound_voting(image_bytes=image_bytes, selected_model=selected_model)
     except Exception as e:
         print(f"ERROR /api/diagnosis/predict-image: {e}")
         return jsonify({'error': f'Voting failed: {str(e)}'}), 500

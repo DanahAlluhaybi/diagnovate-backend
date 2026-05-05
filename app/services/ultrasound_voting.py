@@ -45,15 +45,9 @@ def _majority_vote(results: list) -> dict:
     return {"final_vote": final_vote, "malignant_count": mal, "benign_count": ben, "valid_votes": n}
 
 
-def run_ultrasound_voting(image_bytes: bytes, efficientnet_result=None) -> dict:
-    """
-    Args:
-        image_bytes:         Raw bytes of the uploaded ultrasound image.
-        efficientnet_result: Pre-computed EfficientNet+YOLO dict, or None to run server-side.
-
-    Returns full voting result dict.
-    """
+def run_ultrasound_voting(image_bytes: bytes, efficientnet_result=None, selected_model: str = "majority") -> dict:
     errors = []
+    single = selected_model.lower().strip() not in ("majority", "majority voting", "")
 
     if efficientnet_result is None:
         try:
@@ -63,32 +57,67 @@ def run_ultrasound_voting(image_bytes: bytes, efficientnet_result=None) -> dict:
 
     eff_result = _format_efficientnet(efficientnet_result)
 
+    if single:
+        model_key = selected_model.lower()
+        if "swin" in model_key:
+            try:
+                swin_result = predict_swin(image_bytes)
+            except Exception as e:
+                errors.append(f"Swin: {e}")
+                swin_result = {"model": "Swin Transformer", "vote": -1, "confidence": 0.0}
+            result     = swin_result
+            all_results = [swin_result]
+        elif "dense" in model_key:
+            try:
+                dense_result = predict_densenet(image_bytes)
+            except Exception as e:
+                errors.append(f"DenseNet: {e}")
+                dense_result = {"model": "DenseNet-121", "vote": -1, "confidence": 0.0}
+            result      = dense_result
+            all_results = [dense_result]
+        else:
+            result      = eff_result
+            all_results = [eff_result]
+
+        vote       = result.get("vote", -1)
+        confidence = float(result.get("confidence", 0.0))
+        if   vote == 1: final_prediction = "Malignant"
+        elif vote == 0: final_prediction = "Benign"
+        else:           final_prediction = "Inconclusive"
+
+        return {
+            "final_prediction": final_prediction,
+            "final_vote":       vote,
+            "confidence_score": round(confidence * 100, 2) if confidence <= 1 else round(confidence, 2),
+            "vote_summary":     f"Single model: {result.get('model', selected_model)}",
+            "unanimous":        True,
+            "models":           all_results,
+            "errors":           errors if errors else None,
+            "disclaimer":       "AI-assisted result — intended to support, not replace, "
+                                "clinical judgment. Final diagnosis must be confirmed by a physician.",
+        }
+
+    # Majority voting
     try:
         swin_result = predict_swin(image_bytes)
     except Exception as e:
         errors.append(f"Swin: {e}")
-        swin_result = {
-            "model": "Swin Transformer", "vote": -1,
-            "label": "error", "confidence": 0.0,
-            "probs": {"benign": 0.0, "malignant": 0.0},
-        }
+        swin_result = {"model": "Swin Transformer", "vote": -1, "label": "error",
+                       "confidence": 0.0, "probs": {"benign": 0.0, "malignant": 0.0}}
 
     try:
         dense_result = predict_densenet(image_bytes)
     except Exception as e:
         errors.append(f"DenseNet: {e}")
-        dense_result = {
-            "model": "DenseNet-121", "vote": -1,
-            "label": "error", "confidence": 0.0,
-            "probs": {"benign": 0.0, "malignant": 0.0},
-        }
+        dense_result = {"model": "DenseNet-121", "vote": -1, "label": "error",
+                        "confidence": 0.0, "probs": {"benign": 0.0, "malignant": 0.0}}
 
     all_results = [eff_result, swin_result, dense_result]
     vote_info   = _majority_vote(all_results)
     final_vote  = vote_info["final_vote"]
 
-    winning     = [r for r in all_results if r["vote"] == final_vote]
-    avg_conf    = sum(r["confidence"] for r in winning) / len(winning) if winning else 0.0
+    winning  = [r for r in all_results if r["vote"] == final_vote]
+    avg_conf = sum(r["confidence"] for r in winning) / len(winning) if winning else 0.0
 
     if   final_vote == 1: final_prediction = "Malignant"
     elif final_vote == 0: final_prediction = "Benign"
@@ -106,8 +135,6 @@ def run_ultrasound_voting(image_bytes: bytes, efficientnet_result=None) -> dict:
         "unanimous":        mal == total or ben == total,
         "models":           all_results,
         "errors":           errors if errors else None,
-        "disclaimer": (
-            "AI-assisted result — intended to support, not replace, "
-            "clinical judgment. Final diagnosis must be confirmed by a physician."
-        ),
+        "disclaimer":       "AI-assisted result — intended to support, not replace, "
+                            "clinical judgment. Final diagnosis must be confirmed by a physician.",
     }
