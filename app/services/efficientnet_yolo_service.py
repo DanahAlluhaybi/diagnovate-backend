@@ -4,8 +4,12 @@ EfficientNet-B4 + YOLOv8 — Thyroid Ultrasound Classifier
 Pipeline: YOLO detects nodule → crop → EfficientNet classifies crop
 """
 
-import io
 import os
+os.environ["DISPLAY"] = ""
+os.environ["MPLBACKEND"] = "Agg"
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
+import io
 import torch
 import torch.nn as nn
 import timm
@@ -13,9 +17,12 @@ from PIL import Image
 from torchvision import transforms
 
 try:
+    os.environ["ULTRALYTICS_SETTINGS"] = '{"sync": false}'
     from ultralytics import YOLO
+    _YOLO_AVAILABLE = True
 except Exception:
     YOLO = None
+    _YOLO_AVAILABLE = False
 
 YOLO_PATH   = os.path.join(os.path.dirname(__file__), '..', 'ml', 'thyroid_yolo.pt')
 EFFNET_PATH = os.path.join(os.path.dirname(__file__), '..', 'ml', 'thyroid_efficientnet.pth')
@@ -38,13 +45,10 @@ def _load_yolo():
     global _yolo_model
     if _yolo_model is not None:
         return _yolo_model
-    if YOLO is None:
+    if not _YOLO_AVAILABLE:
         raise RuntimeError("ultralytics/YOLO unavailable: libGL missing")
-    try:
-        from ultralytics import YOLO as _YOLO
-        _yolo_model = _YOLO(YOLO_PATH)
-    except Exception as e:
-        raise RuntimeError(f"YOLO load failed: {e}")
+    model = YOLO(YOLO_PATH)
+    _yolo_model = model
     print(f"✅ YOLOv8 loaded from {YOLO_PATH}")
     return _yolo_model
 
