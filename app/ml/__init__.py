@@ -98,12 +98,16 @@ def predict_lab(patient_data: dict) -> dict:
     majority = "Malignant" if [xgb_pred, cat_pred, rf_pred].count("Malignant") >= 2 else "Benign"
     avg_prob = round((xgb_prob + cat_prob + rf_prob) / 3 * 100, 1)
 
+    xgb_conf = round(xgb_prob * 100, 1) if xgb_pred == "Malignant" else round((1 - xgb_prob) * 100, 1)
+    cat_conf  = round(cat_prob  * 100, 1) if cat_pred  == "Malignant" else round((1 - cat_prob)  * 100, 1)
+    rf_conf   = round(rf_prob   * 100, 1) if rf_pred   == "Malignant" else round((1 - rf_prob)   * 100, 1)
+
     return {
         "majority_result": majority,
         "confidence": avg_prob,
         "models": {
-            "XGBoost":       {"result": xgb_pred, "confidence": round(xgb_prob * 100, 1)},
-            "CatBoost":      {"result": cat_pred,  "confidence": round(cat_prob  * 100, 1)},
-            "Random Forest": {"result": rf_pred,   "confidence": round(rf_prob   * 100, 1)},
+            "XGBoost":       {"result": xgb_pred, "confidence": xgb_conf},
+            "CatBoost":      {"result": cat_pred,  "confidence": cat_conf},
+            "Random Forest": {"result": rf_pred,   "confidence": rf_conf},
         }
     }
