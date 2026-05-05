@@ -20,5 +20,6 @@ cloudinary==1.40.0
 replicate==0.25.1
 gunicorn==21.2.0
 timm==1.0.3
+Flask-Limiter==3.5.0
 huggingface_hub>=0.23.0
 ultralytics>=8.0.0

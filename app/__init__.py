@@ -1,12 +1,16 @@
 from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from app.models import db
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+limiter = Limiter(get_remote_address, default_limits=["200 per day", "50 per hour"])
 
 import os as _os
 print(f"[startup] PORT env var = {_os.getenv('PORT', 'NOT SET')}")
@@ -46,6 +50,7 @@ def create_app():
     db.init_app(app)
     Migrate(app, db)
     JWTManager(app)
+    limiter.init_app(app)
 
     from app.routes.auth            import auth_bp
     from app.routes.dashboard       import dashboard_bp

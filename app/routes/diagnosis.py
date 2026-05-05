@@ -9,6 +9,7 @@ Diagnosis Routes:
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
+from app import limiter
 
 from app.services.ultrasound_voting         import run_ultrasound_voting
 from app.services.swin_service              import is_swin_loaded
@@ -21,6 +22,7 @@ MAJORITY_ALIASES = {'majority voting', 'majority', 'voting', 'ensemble', ''}
 
 
 @diagnosis_bp.route('/api/diagnosis/predict', methods=['POST', 'OPTIONS'])
+@limiter.limit("20 per minute")
 @jwt_required()
 def predict():
     if request.method == 'OPTIONS':
@@ -86,6 +88,7 @@ def get_fields():
 
 
 @diagnosis_bp.route('/api/diagnosis/predict-image', methods=['POST', 'OPTIONS'])
+@limiter.limit("10 per minute")
 @jwt_required()
 def predict_image():
     if request.method == 'OPTIONS':
