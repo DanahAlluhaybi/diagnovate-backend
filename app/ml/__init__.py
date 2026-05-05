@@ -48,6 +48,7 @@ def load_ml_artifacts():
     ml_ready        = True
 
     print(f"✅ ML loaded — {len(feature_columns)} features, threshold={threshold}")
+    print(f"Feature columns: {list(feature_columns)}")
 
 
 def predict_lab(patient_data: dict) -> dict:

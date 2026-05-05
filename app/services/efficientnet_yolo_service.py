@@ -12,6 +12,11 @@ import timm
 from PIL import Image
 from torchvision import transforms
 
+try:
+    from ultralytics import YOLO
+except Exception:
+    YOLO = None
+
 YOLO_PATH   = os.path.join(os.path.dirname(__file__), '..', 'ml', 'thyroid_yolo.pt')
 EFFNET_PATH = os.path.join(os.path.dirname(__file__), '..', 'ml', 'thyroid_efficientnet.pth')
 DEVICE      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,8 +38,13 @@ def _load_yolo():
     global _yolo_model
     if _yolo_model is not None:
         return _yolo_model
-    from ultralytics import YOLO
-    _yolo_model = YOLO(YOLO_PATH)
+    if YOLO is None:
+        raise RuntimeError("ultralytics/YOLO unavailable: libGL missing")
+    try:
+        from ultralytics import YOLO as _YOLO
+        _yolo_model = _YOLO(YOLO_PATH)
+    except Exception as e:
+        raise RuntimeError(f"YOLO load failed: {e}")
     print(f"✅ YOLOv8 loaded from {YOLO_PATH}")
     return _yolo_model
 

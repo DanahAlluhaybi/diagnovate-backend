@@ -63,7 +63,7 @@ def _load_model() -> nn.Module:
         print(f"✅ DenseNet model downloaded from HuggingFace to {resolved}")
 
     checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
-    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    state_dict = checkpoint.get("model_state", checkpoint.get("model_state_dict", checkpoint))
     model.load_state_dict(state_dict)
     model.eval()
 
