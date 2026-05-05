@@ -55,8 +55,34 @@ def predict_lab(patient_data: dict) -> dict:
     if not ml_ready:
         raise RuntimeError("ML models not loaded")
     import pandas as pd
-    df = pd.DataFrame([patient_data]) if isinstance(patient_data, dict) else patient_data.copy()
-    df = df[feature_columns]
+
+    # Default all features to 0, then map whatever the frontend sends
+    row = {col: 0 for col in feature_columns}
+
+    def _get(*keys, default=0):
+        for k in keys:
+            if k in patient_data:
+                return patient_data[k]
+        return default
+
+    row['Age']                  = _get('Age', 'age', default=0)
+    row['Gender']               = _get('Gender', 'gender', 'sex', default=0)
+    row['Smoking']              = _get('Smoking', 'smoking', default=0)
+    row['Hx Smoking']           = _get('Hx Smoking', 'hx_smoking', 'hxSmoking', default=0)
+    row['Hx Radiothreapy']      = _get('Hx Radiothreapy', 'hx_radiotherapy', 'hxRadiotherapy', default=0)
+    row['Thyroid Function']     = _get('Thyroid Function', 'thyroid_function', 'thyroidFunction', default=0)
+    row['Physical Examination'] = _get('Physical Examination', 'physical_examination', 'physicalExamination', default=0)
+    row['Adenopathy']           = _get('Adenopathy', 'adenopathy', default=0)
+    row['Pathology']            = _get('Pathology', 'pathology', default=0)
+    row['Focality']             = _get('Focality', 'focality', default=0)
+    row['Risk']                 = _get('Risk', 'risk', default=0)
+    row['T']                    = _get('T', 't', 't_stage', 'tStage', default=0)
+    row['N']                    = _get('N', 'n', 'n_stage', 'nStage', default=0)
+    row['M']                    = _get('M', 'm', 'm_stage', 'mStage', default=0)
+    row['Stage']                = _get('Stage', 'stage', default=0)
+    row['Response']             = _get('Response', 'response', default=0)
+
+    df = pd.DataFrame([row])
     X  = imputer.transform(df)
 
     xgb_prob = xgb_model.predict_proba(X)[0][1]
