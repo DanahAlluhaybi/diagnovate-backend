@@ -7,7 +7,10 @@ import io
 import gc
 import base64
 import numpy as np
-import cv2
+try:
+    import cv2
+except Exception:
+    cv2 = None
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify
@@ -179,6 +182,9 @@ def pil_to_base64(img: Image.Image, fmt: str = "PNG") -> str:
 @enhancement_bp.route('/api/enhance', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def enhance():
+    if cv2 is None:
+        return jsonify({'error': 'Image enhancement unavailable'}), 503
+
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
