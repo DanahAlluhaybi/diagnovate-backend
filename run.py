@@ -1,5 +1,12 @@
-# Entry point for the Flask app — creates the app and runs it on the configured port.
+import sys
 import os
+
+# Force UTF-8 output so emoji in log/print statements don't crash on Windows cp1252
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 from app import create_app
 
 app = create_app()
