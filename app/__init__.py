@@ -68,26 +68,13 @@ def create_app():
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
     app.config['MAX_CONTENT_LENGTH']       = 16 * 1024 * 1024
 
-    # ── CORS / request lifecycle ──────────────────────────────────────────────
-    _allowed_origins = {'*'}
-
+    # ── Request lifecycle ─────────────────────────────────────────────────────
     @app.before_request
     def _set_request_id():
         g.request_id = request.headers.get('X-Request-ID', str(uuid.uuid4())[:8])
 
     @app.after_request
     def _after(response):
-        origin = request.headers.get('Origin', '')
-        if '*' in _allowed_origins:
-            cors_origin = '*'
-        elif origin in _allowed_origins:
-            cors_origin = origin
-            response.headers['Vary'] = 'Origin'
-        else:
-            cors_origin = 'https://diagnovate.org'
-        response.headers['Access-Control-Allow-Origin']  = cors_origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE,OPTIONS'
         response.headers['X-Request-ID'] = g.get('request_id', '-')
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('X-Frame-Options', 'DENY')
@@ -128,6 +115,12 @@ def create_app():
         return jsonify({'error': 'An internal error occurred'}), 500
 
     # ── Extensions ────────────────────────────────────────────────────────────
+    from flask_cors import CORS
+    CORS(app,
+         origins='*',
+         supports_credentials=False,
+         methods=['GET', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+         allow_headers=['Content-Type', 'Authorization', 'Accept'])
     db.init_app(app)
     Migrate(app, db)
     JWTManager(app)
