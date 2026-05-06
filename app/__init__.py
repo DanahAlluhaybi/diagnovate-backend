@@ -14,7 +14,11 @@ from app.models import db
 load_dotenv()
 
 # ── Module-level limiter (imported by route blueprints) ───────────────────────
-limiter = Limiter(get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter = Limiter(
+    get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri=os.environ.get("DATABASE_URL", "").replace("postgres://", "postgresql://") or "memory://",
+)
 
 # ── Structured logging ────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -195,7 +199,8 @@ def create_app():
             _ml_status['loading'] = False
             logger.info("Background ML load complete — all models ready")
 
-    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "300")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "600")
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     t = threading.Thread(target=_load_all_models, name='ml-loader', daemon=True)
     t.start()
 
