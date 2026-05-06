@@ -69,7 +69,9 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH']       = 16 * 1024 * 1024
 
     # ── CORS / request lifecycle ──────────────────────────────────────────────
-    allowed_origins = os.getenv('ALLOWED_ORIGINS', '*')
+    _hardcoded = {'https://diagnovate.org', 'https://www.diagnovate.org'}
+    _env_origins = {o.strip() for o in os.getenv('ALLOWED_ORIGINS', '').split(',') if o.strip()}
+    _allowed_origins = _hardcoded | _env_origins  # always includes production domains
 
     @app.before_request
     def _set_request_id():
@@ -77,7 +79,15 @@ def create_app():
 
     @app.after_request
     def _after(response):
-        response.headers['Access-Control-Allow-Origin']  = allowed_origins
+        origin = request.headers.get('Origin', '')
+        if '*' in _allowed_origins:
+            cors_origin = '*'
+        elif origin in _allowed_origins:
+            cors_origin = origin
+            response.headers['Vary'] = 'Origin'
+        else:
+            cors_origin = 'https://diagnovate.org'
+        response.headers['Access-Control-Allow-Origin']  = cors_origin
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
         response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE,OPTIONS'
         response.headers['X-Request-ID'] = g.get('request_id', '-')
