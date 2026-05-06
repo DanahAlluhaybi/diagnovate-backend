@@ -1,11 +1,14 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
 from app.models import db, Doctor
+from app import limiter
 from datetime import timedelta
+import logging
 import os
 import re
 
 auth_bp = Blueprint('auth', __name__)
+logger  = logging.getLogger('diagnovate.auth')
 
 DEV_MODE    = os.getenv("DEV_MODE", "false").lower() == "true"
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -58,6 +61,7 @@ def _email_html_wrapper(body_html: str) -> str:
 
 # ── SIGNUP ─────────────────────────────────────────────────────────────────────
 @auth_bp.route('/api/auth/signup', methods=['POST', 'OPTIONS'])
+@limiter.limit("5 per hour")
 def signup():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
@@ -108,12 +112,13 @@ def signup():
 
     except Exception as e:
         db.session.rollback()
-        print(f"ERROR in signup: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception('signup error')
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 # ── LOGIN ──────────────────────────────────────────────────────────────────────
 @auth_bp.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+@limiter.limit("5 per minute; 20 per hour")
 def login():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
@@ -172,12 +177,13 @@ def login():
         }), 200
 
     except Exception as e:
-        print(f"ERROR in login: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception('login error')
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 # ── VERIFY OTP ─────────────────────────────────────────────────────────────────
 @auth_bp.route('/api/auth/verify-otp', methods=['POST', 'OPTIONS'])
+@limiter.limit("5 per minute")
 def verify_otp():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
@@ -225,12 +231,13 @@ def verify_otp():
         }), 200
 
     except Exception as e:
-        print(f"ERROR in verify_otp: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception('verify_otp error')
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 # ── SEND PHONE OTP ─────────────────────────────────────────────────────────────
 @auth_bp.route('/api/auth/send-phone-otp', methods=['POST', 'OPTIONS'])
+@limiter.limit("5 per minute")
 def send_phone_otp():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
@@ -253,12 +260,13 @@ def send_phone_otp():
         return jsonify({'success': True, 'message': 'SMS OTP sent'}), 200
 
     except Exception as e:
-        print(f"ERROR in send_phone_otp: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception('send_phone_otp error')
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 # ── SEND EMAIL OTP ─────────────────────────────────────────────────────────────
 @auth_bp.route('/api/auth/send-email-otp', methods=['POST', 'OPTIONS'])
+@limiter.limit("5 per minute")
 def send_email_otp():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
@@ -281,8 +289,8 @@ def send_email_otp():
         return jsonify({'success': True, 'message': 'Email OTP sent'}), 200
 
     except Exception as e:
-        print(f"ERROR in send_email_otp: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception('send_email_otp error')
+        return jsonify({'error': 'An internal error occurred'}), 500
 
 
 # ── AUTH STATUS ────────────────────────────────────────────────────────────────

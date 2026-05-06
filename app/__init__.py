@@ -1,57 +1,142 @@
-from flask import Flask, jsonify
+import logging
+import uuid
+import os
+from datetime import timedelta
+from dotenv import load_dotenv
+from flask import Flask, jsonify, g, request
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from app.models import db
-from datetime import timedelta
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
+# ── Module-level limiter (imported by route blueprints) ───────────────────────
 limiter = Limiter(get_remote_address, default_limits=["200 per day", "50 per hour"])
 
-import os as _os
-print(f"[startup] PORT env var = {_os.getenv('PORT', 'NOT SET')}")
-print(f"[startup] DATABASE_URL = {_os.getenv('DATABASE_URL', 'NOT SET')[:30]}...")
+# ── Structured logging ────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%SZ',
+)
+logger = logging.getLogger('diagnovate')
+logger.info("PORT=%s", os.getenv('PORT', 'NOT SET'))
+
+
+_WEAK_SECRETS = {
+    'super-secret-key-change-in-production',
+    'flask-secret-key-change-in-production',
+    '',
+}
 
 
 def create_app():
     app = Flask(__name__)
 
+    # ── Database ──────────────────────────────────────────────────────────────
     db_url = os.getenv('DATABASE_URL', 'sqlite:///diagnovate.db')
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    app.config['SQLALCHEMY_DATABASE_URI']    = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY']           = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
-    app.config['SECRET_KEY']               = os.getenv('SECRET_KEY', 'flask-secret-key-change-in-production')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES']  = timedelta(days=7)
-    app.config['MAX_CONTENT_LENGTH']        = 16 * 1024 * 1024   # 16 MB max upload
+    app.config['SQLALCHEMY_ENGINE_OPTIONS']  = {
+        'pool_pre_ping': True,
+        'pool_recycle':  300,
+    }
 
+    # ── Secrets ───────────────────────────────────────────────────────────────
+    jwt_secret = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-in-production')
+    secret_key = os.getenv('SECRET_KEY',     'flask-secret-key-change-in-production')
+    dev_mode   = os.getenv('DEV_MODE', 'false').lower() == 'true'
+
+    if not dev_mode and (jwt_secret in _WEAK_SECRETS or secret_key in _WEAK_SECRETS):
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY and SECRET_KEY must be set to strong random values in production.\n"
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\"\n"
+            "Set DEV_MODE=true only in local development."
+        )
+    if dev_mode:
+        logger.warning("DEV_MODE=true — OTP is DISABLED. Never use this in production.")
+
+    app.config['JWT_SECRET_KEY']          = jwt_secret
+    app.config['SECRET_KEY']              = secret_key
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+    app.config['MAX_CONTENT_LENGTH']       = 16 * 1024 * 1024
+
+    # ── CORS / request lifecycle ──────────────────────────────────────────────
     allowed_origins = os.getenv('ALLOWED_ORIGINS', '*')
 
+    @app.before_request
+    def _set_request_id():
+        g.request_id = request.headers.get('X-Request-ID', str(uuid.uuid4())[:8])
+
+    @app.after_request
+    def _after(response):
+        response.headers['Access-Control-Allow-Origin']  = allowed_origins
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE,OPTIONS'
+        response.headers['X-Request-ID'] = g.get('request_id', '-')
+        # Security headers (lightweight, no Talisman conflict risk)
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        app.logger.info('%s %s %s rid=%s',
+                        request.method, request.path,
+                        response.status_code, g.get('request_id', '-'))
+        return response
+
+    # ── Health check ──────────────────────────────────────────────────────────
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'message': 'Diagnovate API is running'}), 200
+        return jsonify({'status': 'ok', 'service': 'diagnovate-api'}), 200
 
     @app.route('/api/<path:path>', methods=['OPTIONS'])
     def options_handler(path=None):
         return jsonify({}), 200
 
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin',  allowed_origins)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,PATCH,POST,DELETE,OPTIONS')
-        return response
+    # ── Global error handlers (no stack traces to client) ─────────────────────
+    from werkzeug.exceptions import HTTPException
 
+    @app.errorhandler(HTTPException)
+    def http_error(e):
+        return jsonify({'error': e.description}), e.code
+
+    @app.errorhandler(429)
+    def rate_limited(e):
+        return jsonify({'error': 'Too many requests. Please slow down and try again.'}), 429
+
+    @app.errorhandler(Exception)
+    def unhandled(e):
+        if isinstance(e, HTTPException):
+            return jsonify({'error': e.description}), e.code
+        app.logger.exception('Unhandled exception rid=%s', g.get('request_id', '-'))
+        return jsonify({'error': 'An internal error occurred'}), 500
+
+    # ── Extensions ────────────────────────────────────────────────────────────
     db.init_app(app)
     Migrate(app, db)
     JWTManager(app)
     limiter.init_app(app)
 
+    # ── Talisman security headers ─────────────────────────────────────────────
+    try:
+        from flask_talisman import Talisman
+        Talisman(
+            app,
+            force_https=False,           # Railway proxy handles TLS termination
+            strict_transport_security=True,
+            strict_transport_security_max_age=31536000,
+            content_security_policy=False,  # pure JSON API, no HTML
+            x_content_type_options=True,
+            frame_options='DENY',
+        )
+        logger.info("Flask-Talisman security headers enabled")
+    except ImportError:
+        logger.warning("flask-talisman not installed — security headers limited")
+
+    # ── Blueprints ────────────────────────────────────────────────────────────
     from app.routes.auth            import auth_bp
     from app.routes.dashboard       import dashboard_bp
     from app.routes.enhancement     import enhancement_bp
@@ -79,35 +164,30 @@ def create_app():
     app.register_blueprint(auto_bp)
 
 
+    # ── Startup: ML artifacts + deep learning models ──────────────────────────
     with app.app_context():
-        print("✅ App initialized.")
+        logger.info("App initialized — loading ML artifacts")
         from app.ml import load_ml_artifacts
         try:
             load_ml_artifacts()
         except Exception as e:
-            print(f"⚠️  ML artifacts failed: {e} — app will start without ML.")
+            logger.warning("ML artifacts failed: %s — app will start without ML", e)
 
         def _preload_ml():
-            print("\n🔄 Preloading ML models...")
-            try:
-                from app.services.swin_service import preload_swin
-                preload_swin()
-            except Exception as e:
-                print(f"⚠️  Swin preload skipped: {e}")
-            try:
-                from app.services.densenet_service import preload_densenet
-                preload_densenet()
-            except Exception as e:
-                print(f"⚠️  DenseNet preload skipped: {e}")
-            try:
-                from app.services.efficientnet_yolo_service import preload_efficientnet_yolo
-                preload_efficientnet_yolo()
-            except Exception as e:
-                print(f"⚠️  EfficientNet+YOLO preload skipped: {e}")
-            print("✅ ML preload complete\n")
+            logger.info("Preloading deep learning models...")
+            for name, loader in [
+                ('Swin',            ('app.services.swin_service',              'preload_swin')),
+                ('DenseNet',        ('app.services.densenet_service',           'preload_densenet')),
+                ('EfficientNet+YOLO', ('app.services.efficientnet_yolo_service', 'preload_efficientnet_yolo')),
+            ]:
+                try:
+                    mod  = __import__(loader[0], fromlist=[loader[1]])
+                    fn   = getattr(mod, loader[1])
+                    fn()
+                except Exception as e:
+                    logger.warning("%s preload skipped: %s", name, e)
+            logger.info("ML preload complete")
 
         _preload_ml()
 
     return app
-
-
