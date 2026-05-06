@@ -1,4 +1,5 @@
 import logging
+import threading
 import uuid
 import os
 from datetime import timedelta
@@ -24,6 +25,8 @@ logging.basicConfig(
 logger = logging.getLogger('diagnovate')
 logger.info("PORT=%s", os.getenv('PORT', 'NOT SET'))
 
+# ── ML loading state (checked by /health) ────────────────────────────────────
+_ml_status = {"ready": False, "loading": False}
 
 _WEAK_SECRETS = {
     'super-secret-key-change-in-production',
@@ -78,7 +81,6 @@ def create_app():
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,Accept'
         response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE,OPTIONS'
         response.headers['X-Request-ID'] = g.get('request_id', '-')
-        # Security headers (lightweight, no Talisman conflict risk)
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('X-Frame-Options', 'DENY')
         response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
@@ -87,16 +89,19 @@ def create_app():
                         response.status_code, g.get('request_id', '-'))
         return response
 
-    # ── Health check ──────────────────────────────────────────────────────────
+    # ── Health check — always responds immediately ────────────────────────────
     @app.route('/health')
     def health():
-        return jsonify({'status': 'ok', 'service': 'diagnovate-api'}), 200
+        if _ml_status['ready']:
+            return jsonify({'status': 'ok', 'models_ready': True}), 200
+        return jsonify({'status': 'ok', 'models_ready': False,
+                        'message': 'Models loading in background'}), 200
 
     @app.route('/api/<path:path>', methods=['OPTIONS'])
     def options_handler(path=None):
         return jsonify({}), 200
 
-    # ── Global error handlers (no stack traces to client) ─────────────────────
+    # ── Global error handlers ─────────────────────────────────────────────────
     from werkzeug.exceptions import HTTPException
 
     @app.errorhandler(HTTPException)
@@ -125,10 +130,10 @@ def create_app():
         from flask_talisman import Talisman
         Talisman(
             app,
-            force_https=False,           # Railway proxy handles TLS termination
+            force_https=False,
             strict_transport_security=True,
             strict_transport_security_max_age=31536000,
-            content_security_policy=False,  # pure JSON API, no HTML
+            content_security_policy=False,
             x_content_type_options=True,
             frame_options='DENY',
         )
@@ -148,7 +153,7 @@ def create_app():
     from app.routes.forgot_password import forgot_password_bp
     from app.routes.reports         import reports_bp
     from app.routes.report          import report_bp
-    from app.routes.auto_diagnosis import auto_bp
+    from app.routes.auto_diagnosis  import auto_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -163,31 +168,33 @@ def create_app():
     app.register_blueprint(report_bp)
     app.register_blueprint(auto_bp)
 
+    # ── ML loading in background thread — app serves immediately ─────────────
+    def _load_all_models():
+        _ml_status['loading'] = True
+        with app.app_context():
+            logger.info("Background ML load started")
+            from app.ml import load_ml_artifacts
+            try:
+                load_ml_artifacts()
+            except Exception as e:
+                logger.warning("ML artifacts failed: %s", e)
 
-    # ── Startup: ML artifacts + deep learning models ──────────────────────────
-    with app.app_context():
-        logger.info("App initialized — loading ML artifacts")
-        from app.ml import load_ml_artifacts
-        try:
-            load_ml_artifacts()
-        except Exception as e:
-            logger.warning("ML artifacts failed: %s — app will start without ML", e)
-
-        def _preload_ml():
-            logger.info("Preloading deep learning models...")
-            for name, loader in [
-                ('Swin',            ('app.services.swin_service',              'preload_swin')),
-                ('DenseNet',        ('app.services.densenet_service',           'preload_densenet')),
-                ('EfficientNet+YOLO', ('app.services.efficientnet_yolo_service', 'preload_efficientnet_yolo')),
+            for name, mod_path, fn_name in [
+                ('Swin',              'app.services.swin_service',              'preload_swin'),
+                ('DenseNet',          'app.services.densenet_service',           'preload_densenet'),
+                ('EfficientNet+YOLO', 'app.services.efficientnet_yolo_service', 'preload_efficientnet_yolo'),
             ]:
                 try:
-                    mod  = __import__(loader[0], fromlist=[loader[1]])
-                    fn   = getattr(mod, loader[1])
-                    fn()
+                    mod = __import__(mod_path, fromlist=[fn_name])
+                    getattr(mod, fn_name)()
                 except Exception as e:
                     logger.warning("%s preload skipped: %s", name, e)
-            logger.info("ML preload complete")
 
-        _preload_ml()
+            _ml_status['ready']   = True
+            _ml_status['loading'] = False
+            logger.info("Background ML load complete — all models ready")
+
+    t = threading.Thread(target=_load_all_models, name='ml-loader', daemon=True)
+    t.start()
 
     return app
