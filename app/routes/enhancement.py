@@ -186,7 +186,7 @@ def enhance():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
-    if not _app._ml_status['ready']:
+    if not _app.ml_ready:
         return jsonify({'error': 'Models are still loading, please try again in a moment'}), 503
 
     if cv2 is None:

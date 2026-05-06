@@ -31,6 +31,7 @@ logger.info("PORT=%s", os.getenv('PORT', 'NOT SET'))
 
 # ── ML loading state (checked by /health) ────────────────────────────────────
 _ml_status = {"ready": False, "loading": False}
+ml_ready = False
 
 _WEAK_SECRETS = {
     'super-secret-key-change-in-production',
@@ -196,6 +197,8 @@ def create_app():
                     logger.warning("%s preload skipped: %s", name, e)
 
             _ml_status['ready']   = True
+            global ml_ready
+            ml_ready = True
             _ml_status['loading'] = False
             logger.info("Background ML load complete — all models ready")
 
