@@ -144,18 +144,20 @@ def login():
         if doctor.status == 'inactive':
             return jsonify({'error': 'Your account has been deactivated. Contact admin.'}), 403
 
-        if not twilio_client:
-            return jsonify({'error': 'OTP service unavailable. Contact admin.'}), 503
-
-        twilio_client.verify.v2.services(SERVICE_SID) \
-            .verifications \
-            .create(to=doctor.phone, channel='sms')
-
+        access_token = create_access_token(
+            identity=str(doctor.id),
+            expires_delta=timedelta(days=7)
+        )
         return jsonify({
-            'success':    True,
-            'message':    'OTP sent via SMS',
-            'identifier': doctor.phone,
-            'channel':    'sms',
+            'success':      True,
+            'access_token': access_token,
+            'doctor': {
+                'id':        doctor.id,
+                'name':      doctor.name,
+                'email':     doctor.email,
+                'phone':     doctor.phone,
+                'specialty': doctor.specialty,
+            }
         }), 200
 
     except Exception as e:
