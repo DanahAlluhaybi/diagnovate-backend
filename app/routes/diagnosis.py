@@ -31,8 +31,8 @@ def predict():
         return jsonify({}), 200
 
     try:
-        if _ml.xgb_model is None:
-            return jsonify({'error': 'Models not loaded'}), 500
+        if not _ml.ml_ready:
+            return jsonify({'error': 'Models not loaded yet, please try again'}), 503
 
         data = request.get_json(force=True, silent=True)
         if not data:

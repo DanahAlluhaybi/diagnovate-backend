@@ -39,8 +39,7 @@ def _safe_load(path: str, url_env_key: Optional[str] = None) -> Any:
 
 
 def load_ml_artifacts() -> None:
-    global feature_columns, imputer, threshold
-    global xgb_model, cat_model, rf_model, model, ml_ready
+    global feature_columns, imputer, threshold, xgb_model, cat_model, rf_model, model, ml_ready
 
     feature_columns = _safe_load(FEATURES_PATH, 'MODEL_FEATURES_URL')
     imputer         = _safe_load(IMPUTER_PATH,   'MODEL_IMPUTER_URL')
