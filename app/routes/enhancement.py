@@ -187,7 +187,7 @@ def enhance():
 
 
     if cv2 is None:
-        return jsonify({'error': 'Image enhancement unavailable'}), 503
+        return jsonify({'error': f'cv2 is None — opencv not loaded. Check: {str(type(cv2))}'}), 503
 
     if 'image' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
