@@ -69,9 +69,7 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH']       = 16 * 1024 * 1024
 
     # ── CORS / request lifecycle ──────────────────────────────────────────────
-    _hardcoded = {'https://diagnovate.org', 'https://www.diagnovate.org'}
-    _env_origins = {o.strip() for o in os.getenv('ALLOWED_ORIGINS', '').split(',') if o.strip()}
-    _allowed_origins = _hardcoded | _env_origins  # always includes production domains
+    _allowed_origins = {'*'}
 
     @app.before_request
     def _set_request_id():
