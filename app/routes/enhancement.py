@@ -17,6 +17,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from PIL import Image
 import os
+from app import _ml_status
 
 enhancement_bp = Blueprint('enhancement', __name__)
 
@@ -182,11 +183,14 @@ def pil_to_base64(img: Image.Image, fmt: str = "PNG") -> str:
 @enhancement_bp.route('/api/enhance', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def enhance():
-    if cv2 is None:
-        return jsonify({'error': 'Image enhancement unavailable'}), 503
-
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+
+    if not _ml_status['ready']:
+        return jsonify({'error': 'Models are still loading, please try again in a moment'}), 503
+
+    if cv2 is None:
+        return jsonify({'error': 'Image enhancement unavailable'}), 503
 
     if 'image' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400

@@ -195,6 +195,7 @@ def create_app():
             _ml_status['loading'] = False
             logger.info("Background ML load complete — all models ready")
 
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "300")
     t = threading.Thread(target=_load_all_models, name='ml-loader', daemon=True)
     t.start()
 

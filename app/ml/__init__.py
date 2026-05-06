@@ -28,7 +28,7 @@ def _safe_load(path: str, url_env_key: Optional[str] = None) -> Any:
     url = os.getenv(url_env_key or '', '').strip()
     if url:
         print(f"  Downloading {os.path.basename(path)}...")
-        r = requests.get(url, timeout=60)
+        r = requests.get(url, timeout=300)
         r.raise_for_status()
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as f:
             f.write(r.content)
