@@ -3,6 +3,7 @@ app/routes/diagnosis.py
 Diagnosis Routes:
     POST /api/diagnosis/predict          — Lab data (Majority Voting or single model)
     POST /api/diagnosis/predict-image    — Ultrasound Voting (Swin + DenseNet + EfficientNet)
+    POST /api/diagnosis/auto             — Auto Mode (Orchestrator)
     GET  /api/diagnosis/fields           — Required lab fields
     GET  /api/diagnosis/health           — Model load status
 """
@@ -117,7 +118,6 @@ def predict_image():
     if len(image_bytes) < 100:
         return jsonify({'error': 'File too small or empty.'}), 400
 
-    # Validate magic bytes
     magic = image_bytes[:8]
     valid_signatures = [
         b'\xff\xd8\xff',           # JPEG
@@ -159,6 +159,62 @@ def predict_image():
         'errors'        : result.get("errors"),
         'disclaimer'    : result["disclaimer"],
     }), 200
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Auto Mode —
+# ════════════════════════════════════════════════════════════════════════════
+
+@diagnosis_bp.route('/api/diagnosis/auto', methods=['POST', 'OPTIONS'])
+@limiter.limit("10 per minute")
+@jwt_required()
+def auto_predict():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    from app.routes.auto_diagnosis import run_orchestrator
+
+    lab_data    = None
+    image_bytes = None
+
+    raw_lab = request.form.get('lab_data')
+    if raw_lab:
+        import json
+        try:
+            lab_data = json.loads(raw_lab)
+        except Exception:
+            return jsonify({'error': 'Invalid lab_data JSON'}), 400
+
+    if 'image' in request.files:
+        file = request.files['image']
+        if file and file.filename:
+            allowed = {'image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff'}
+            if file.content_type not in allowed:
+                return jsonify({'error': f'Unsupported type: {file.content_type}'}), 400
+            image_bytes = file.read()
+            if len(image_bytes) > 20 * 1024 * 1024:
+                return jsonify({'error': 'File too large. Maximum size is 20MB.'}), 400
+            if len(image_bytes) < 100:
+                return jsonify({'error': 'File too small or empty.'}), 400
+            magic = image_bytes[:8]
+            valid_signatures = [
+                b'\xff\xd8\xff', b'\x89PNG\r\n\x1a\n',
+                b'RIFF', b'BM', b'II*\x00', b'MM\x00*',
+            ]
+            if not any(magic.startswith(sig) for sig in valid_signatures):
+                return jsonify({'error': 'Invalid image file.'}), 400
+
+    if not lab_data and not image_bytes:
+        return jsonify({'error': 'Provide lab_data or image'}), 400
+
+    try:
+        result = run_orchestrator(lab_data, image_bytes)
+        return jsonify({'success': True, **result}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"ERROR /api/diagnosis/auto: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @diagnosis_bp.route('/api/diagnosis/health', methods=['GET'])

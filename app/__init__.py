@@ -63,6 +63,7 @@ def create_app():
     from app.routes.forgot_password import forgot_password_bp
     from app.routes.reports         import reports_bp
     from app.routes.report          import report_bp
+    from app.routes.auto_diagnosis import auto_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -75,6 +76,8 @@ def create_app():
     app.register_blueprint(forgot_password_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(report_bp)
+    app.register_blueprint(auto_bp)
+
 
     with app.app_context():
         print("✅ App initialized.")
