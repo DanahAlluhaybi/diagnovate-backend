@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import limiter
 
+from app.ml import predict_lab, predict_lab_single, xgb_model, feature_columns
 from app.services.ultrasound_voting         import run_ultrasound_voting
 from app.services.swin_service              import is_swin_loaded
 from app.services.densenet_service          import is_densenet_loaded
@@ -30,8 +31,6 @@ def predict():
         return jsonify({}), 200
 
     try:
-        from app.ml import predict_lab, predict_lab_single, xgb_model
-
         if xgb_model is None:
             return jsonify({'error': 'Models not loaded'}), 500
 
@@ -80,7 +79,6 @@ def predict():
 @diagnosis_bp.route('/api/diagnosis/fields', methods=['GET'])
 @jwt_required()
 def get_fields():
-    from app.ml import feature_columns
     return jsonify({
         'success'        : True,
         'required_fields': feature_columns,
@@ -219,7 +217,6 @@ def auto_predict():
 
 @diagnosis_bp.route('/api/diagnosis/health', methods=['GET'])
 def health_check():
-    from app.ml import xgb_model
     return jsonify({
         'lab_model'        : xgb_model is not None,
         'swin'             : is_swin_loaded(),
