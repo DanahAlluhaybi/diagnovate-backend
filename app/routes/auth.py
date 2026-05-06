@@ -149,13 +149,13 @@ def login():
 
         twilio_client.verify.v2.services(SERVICE_SID) \
             .verifications \
-            .create(to=doctor.email, channel='email')
+            .create(to=doctor.phone, channel='sms')
 
         return jsonify({
             'success':    True,
-            'message':    'OTP sent via email',
-            'identifier': doctor.email,
-            'channel':    'email',
+            'message':    'OTP sent via SMS',
+            'identifier': doctor.phone,
+            'channel':    'sms',
         }), 200
 
     except Exception as e:
