@@ -260,7 +260,7 @@ def send_email_otp():
             return jsonify({'error': 'OTP service unavailable'}), 503
 
         twilio_client.verify.v2.services(SERVICE_SID) \
-            .verifications.create(to=identifier, channel='email')
+            .verifications.create(to=identifier, channel='sms')
 
         return jsonify({'success': True, 'message': 'Email OTP sent'}), 200
 
