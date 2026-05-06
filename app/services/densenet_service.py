@@ -41,6 +41,7 @@ def _build_densenet(num_classes: int = 2) -> nn.Module:
 
 
 _densenet_model = None
+_densenet_ready = False
 
 
 def _load_model() -> nn.Module:
@@ -74,6 +75,8 @@ def _load_model() -> nn.Module:
 
 
 def predict_densenet(image_bytes: bytes) -> dict:
+    if not _densenet_ready:
+        raise RuntimeError("Model not ready yet")
     model  = _load_model()
     image  = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     tensor = _transform(image).unsqueeze(0).to(DEVICE)
@@ -103,7 +106,9 @@ def is_densenet_loaded() -> bool:
 
 
 def preload_densenet() -> None:
+    global _densenet_ready
     try:
         _load_model()
+        _densenet_ready = True
     except Exception as e:
         print(f"⚠️  DenseNet-121 failed to load: {e}")

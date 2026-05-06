@@ -47,6 +47,7 @@ class SwinThyroidClassifier(nn.Module):
 
 
 _swin_model = None
+_swin_ready = False
 
 
 def _load_model() -> SwinThyroidClassifier:
@@ -80,6 +81,8 @@ def _load_model() -> SwinThyroidClassifier:
 
 
 def predict_swin(image_bytes: bytes) -> dict:
+    if not _swin_ready:
+        raise RuntimeError("Model not ready yet")
     model  = _load_model()
     image  = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     tensor = _transform(image).unsqueeze(0).to(DEVICE)
@@ -109,7 +112,9 @@ def is_swin_loaded() -> bool:
 
 
 def preload_swin() -> None:
+    global _swin_ready
     try:
         _load_model()
+        _swin_ready = True
     except Exception as e:
         print(f"⚠️  Swin Transformer failed to load: {e}")

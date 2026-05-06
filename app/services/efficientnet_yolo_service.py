@@ -23,6 +23,7 @@ _transform = transforms.Compose([
 ])
 
 _effnet_model = None
+_effnet_ready = False
 
 
 def _load_effnet():
@@ -43,6 +44,8 @@ def _load_effnet():
 
 
 def predict_efficientnet_yolo(image_bytes: bytes) -> dict:
+    if not _effnet_ready:
+        raise RuntimeError("Model not ready yet")
     model  = _load_effnet()
     image  = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     tensor = _transform(image).unsqueeze(0).to(DEVICE)
@@ -64,7 +67,9 @@ def is_efficientnet_yolo_loaded() -> bool:
 
 
 def preload_efficientnet_yolo() -> None:
+    global _effnet_ready
     try:
         _load_effnet()
+        _effnet_ready = True
     except Exception as e:
         print(f"⚠️  EfficientNet+YOLO failed to load: {e}")

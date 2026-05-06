@@ -16,13 +16,13 @@ AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
 SERVICE_SID = os.getenv("TWILIO_SERVICE_SID")
 
 twilio_client = None
-if not DEV_MODE:
-    try:
-        from twilio.rest import Client
-        twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
-        print("✅ Twilio client loaded")
-    except Exception as e:
-        print(f"⚠️ Twilio init failed: {e}")
+try:
+    from twilio.rest import Client
+    twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
+    logger.info("Twilio client loaded")
+except Exception as e:
+    logger.warning(f"Twilio init failed: {e}")
+    twilio_client = None
 
 
 def validate_email(email: str) -> bool:
@@ -144,24 +144,6 @@ def login():
         if doctor.status == 'inactive':
             return jsonify({'error': 'Your account has been deactivated. Contact admin.'}), 403
 
-        if DEV_MODE:
-            print("⚠️  DEV_MODE ON — skipping OTP")
-            access_token = create_access_token(
-                identity=str(doctor.id),
-                expires_delta=timedelta(days=7)
-            )
-            return jsonify({
-                'success':      True,
-                'access_token': access_token,
-                'doctor': {
-                    'id':        doctor.id,
-                    'name':      doctor.name,
-                    'email':     doctor.email,
-                    'phone':     doctor.phone,
-                    'specialty': doctor.specialty,
-                }
-            }), 200
-
         if not twilio_client:
             return jsonify({'error': 'OTP service unavailable. Contact admin.'}), 503
 
@@ -247,10 +229,6 @@ def send_phone_otp():
         if not identifier:
             return jsonify({'error': 'identifier and method ("sms" or "email") are required'}), 400
 
-        if DEV_MODE:
-            print(f"⚠️  DEV_MODE — skipping SMS OTP for {identifier}")
-            return jsonify({'success': True, 'message': 'OTP sent (DEV_MODE)'}), 200
-
         if not twilio_client:
             return jsonify({'error': 'OTP service unavailable'}), 503
 
@@ -275,10 +253,6 @@ def send_email_otp():
         identifier = (data.get('identifier') or '').strip()
         if not identifier:
             return jsonify({'error': 'identifier and method ("sms" or "email") are required'}), 400
-
-        if DEV_MODE:
-            print(f"⚠️  DEV_MODE — skipping email OTP for {identifier}")
-            return jsonify({'success': True, 'message': 'OTP sent (DEV_MODE)'}), 200
 
         if not twilio_client:
             return jsonify({'error': 'OTP service unavailable'}), 503
