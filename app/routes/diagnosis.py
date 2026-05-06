@@ -12,7 +12,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import limiter
 
-from app.ml import predict_lab, predict_lab_single, xgb_model, feature_columns
+import app.ml as _ml
 from app.services.ultrasound_voting         import run_ultrasound_voting
 from app.services.swin_service              import is_swin_loaded
 from app.services.densenet_service          import is_densenet_loaded
@@ -31,7 +31,7 @@ def predict():
         return jsonify({}), 200
 
     try:
-        if xgb_model is None:
+        if _ml.xgb_model is None:
             return jsonify({'error': 'Models not loaded'}), 500
 
         data = request.get_json(force=True, silent=True)
@@ -45,9 +45,9 @@ def predict():
         ).strip().lower()
 
         if selected_model in MAJORITY_ALIASES:
-            result = predict_lab(data)
+            result = _ml.predict_lab(data)
         else:
-            result = predict_lab_single(data, selected_model)
+            result = _ml.predict_lab_single(data, selected_model)
 
         majority  = result['majority_result']
         severity  = 'high' if majority == 'Malignant' else 'low'
@@ -81,7 +81,7 @@ def predict():
 def get_fields():
     return jsonify({
         'success'        : True,
-        'required_fields': feature_columns,
+        'required_fields': _ml.feature_columns,
         'model_name'     : 'XGBoost + CatBoost + RandomForest',
     }), 200
 
@@ -218,7 +218,7 @@ def auto_predict():
 @diagnosis_bp.route('/api/diagnosis/health', methods=['GET'])
 def health_check():
     return jsonify({
-        'lab_model'        : xgb_model is not None,
+        'lab_model'        : _ml.xgb_model is not None,
         'swin'             : is_swin_loaded(),
         'densenet'         : is_densenet_loaded(),
         'efficientnet_yolo': is_efficientnet_yolo_loaded(),
