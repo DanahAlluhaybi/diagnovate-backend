@@ -17,7 +17,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from PIL import Image
 import os
-from app import _ml_status
+import app as _app
 
 enhancement_bp = Blueprint('enhancement', __name__)
 
@@ -186,7 +186,7 @@ def enhance():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
-    if not _ml_status['ready']:
+    if not _app._ml_status['ready']:
         return jsonify({'error': 'Models are still loading, please try again in a moment'}), 503
 
     if cv2 is None:
