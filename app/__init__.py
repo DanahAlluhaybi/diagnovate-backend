@@ -17,7 +17,7 @@ load_dotenv()
 limiter = Limiter(
     get_remote_address,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri=os.environ.get("DATABASE_URL", "").replace("postgres://", "postgresql://") or "memory://",
+    storage_uri=os.environ.get("DATABASE_URL", "").replace("postgres://", "postgresql+psycopg2://").replace("postgresql://", "postgresql+psycopg2://") or "memory://",
 )
 
 # ── Structured logging ────────────────────────────────────────────────────────
