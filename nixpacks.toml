@@ -5,9 +5,9 @@ nixPkgs = [
   "libxcb",
   "libglvnd",
   "mesa",
-  "libSM",
-  "libXext",
-  "libXrender",
+  "xorg.libSM",
+  "xorg.libXext",
+  "xorg.libXrender",
   "zlib",
   "python311"
 ]
