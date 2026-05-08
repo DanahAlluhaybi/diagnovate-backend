@@ -1,6 +1,5 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 from app.models import db, Doctor, PasswordResetToken
-from app.routes.auth import _email_html_wrapper
 import resend, os, secrets
 from datetime import datetime, timedelta
 
@@ -42,13 +41,7 @@ def forgot_password():
             "from": "noreply@diagnovate.org",
             "to": email,
             "subject": "Diagnovate – Reset Your Password",
-            "html": _email_html_wrapper(f"""
-    <h2 style="color:#111827;margin:0 0 8px">Reset your password</h2>
-    <p style="color:#6b7280;margin:0 0 32px">Hi Dr. {doctor.name}, click the button below to choose a new password.</p>
-    <div style="text-align:center;margin:0 0 32px">
-      <a href="{reset_link}" style="background:#0D9488;color:#ffffff;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;display:inline-block;letter-spacing:0.3px">Reset Password</a>
-    </div>
-    <p style="color:#6b7280;text-align:center;font-size:14px;margin:0">This link expires in <strong>1 hour</strong>.</p>"""),
+            "html": render_template('emails/reset_password.html', reset_url=reset_link, doctor_name=doctor.name),
         })
         return jsonify({'success': True, 'message': 'If this email is registered, a reset link has been sent'}), 200
     except Exception as e:
