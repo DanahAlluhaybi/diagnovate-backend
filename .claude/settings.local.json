@@ -14,7 +14,10 @@
       "Bash(git pull *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\danny\\\\PycharmProjects\\\\diagnovate-backend\" -Recurse -Directory)",
       "Bash(Select-Object FullName)",
-      "Bash(pip list *)"
+      "Bash(pip list *)",
+      "Bash(curl -s -o /tmp/test.jpg \"https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Thyroid_ultrasound.jpg/320px-Thyroid_ultrasound.jpg\")",
+      "Bash(curl -s -X POST https://diagnovate-backend-production-f341.up.railway.app/api/enhance -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc3ODA4NTY3MCwianRpIjoiMWU1OWNlYzUtNWNhNi00MDg0LTk4OGMtMTFjYzFlOGNkZTBmIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IjciLCJuYmYiOjE3NzgwODU2NzAsImV4cCI6MTc3ODY5MDQ3MH0.2-Qu5uZUrr-3K79QWs5JyRtQq4eR8_qdONxVFba879g' -F image=@/tmp/test.jpg)",
+      "Bash(curl *)"
     ]
   }
 }
