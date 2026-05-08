@@ -106,8 +106,9 @@ def signup():
         db.session.commit()
 
         return jsonify({
-            'success': True,
-            'message': 'Account created successfully. Awaiting admin approval.',
+            'success':   True,
+            'message':   'Account created successfully. Awaiting admin approval.',
+            'next_step': 'choose_verification',
         }), 201
 
     except Exception as e:
@@ -144,12 +145,20 @@ def login():
         if doctor.status == 'inactive':
             return jsonify({'error': 'Your account has been deactivated. Contact admin.'}), 403
 
+        if not DEV_MODE:
+            return jsonify({
+                'success':     True,
+                'otpRequired': True,
+                'identifier':  identifier,
+            }), 200
+
         access_token = create_access_token(
             identity=str(doctor.id),
             expires_delta=timedelta(days=7)
         )
         return jsonify({
             'success':      True,
+            'otpRequired':  False,
             'access_token': access_token,
             'doctor': {
                 'id':        doctor.id,
@@ -260,7 +269,7 @@ def send_email_otp():
             return jsonify({'error': 'OTP service unavailable'}), 503
 
         twilio_client.verify.v2.services(SERVICE_SID) \
-            .verifications.create(to=identifier, channel='sms')
+            .verifications.create(to=identifier, channel='email')
 
         return jsonify({'success': True, 'message': 'Email OTP sent'}), 200
 
