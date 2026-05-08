@@ -29,6 +29,20 @@ import os
 
 enhancement_bp = Blueprint('enhancement', __name__)
 
+
+@enhancement_bp.route('/api/cv2-debug', methods=['GET'])
+def cv2_debug():
+    import glob
+    so_files = glob.glob('/nix/**/*libGL*.so*', recursive=True) + \
+               glob.glob('/usr/lib/**/*libGL*.so*', recursive=True)
+    return jsonify({
+        'python_version': sys.version,
+        'cv2_version':    cv2.__version__ if cv2 is not None else None,
+        'cv2_error':      _cv2_error,
+        'libGL_so_files': sorted(so_files),
+    })
+
+
 _ort_session  = None
 _model_loaded = False
 
