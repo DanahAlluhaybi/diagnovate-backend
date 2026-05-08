@@ -145,22 +145,14 @@ def login():
         if doctor.status == 'inactive':
             return jsonify({'error': 'Your account has been deactivated. Contact admin.'}), 403
 
-        if not DEV_MODE:
-            return jsonify({
-                'success':     True,
-                'otpRequired': True,
-                'identifier':  identifier,
-            }), 200
-
         access_token = create_access_token(
             identity=str(doctor.id),
             expires_delta=timedelta(days=7)
         )
         return jsonify({
-            'success':      True,
-            'otpRequired':  False,
-            'access_token': access_token,
-            'doctor': {
+            'success': True,
+            'token':   access_token,
+            'user': {
                 'id':        doctor.id,
                 'name':      doctor.name,
                 'email':     doctor.email,
@@ -240,11 +232,20 @@ def send_phone_otp():
         if not identifier:
             return jsonify({'error': 'identifier and method ("sms" or "email") are required'}), 400
 
+        print(f"Sending OTP to: {identifier} via sms")
+        logger.info(f"Sending OTP to: {identifier} via sms")
+
         if not twilio_client:
             return jsonify({'error': 'OTP service unavailable'}), 503
 
-        twilio_client.verify.v2.services(SERVICE_SID) \
-            .verifications.create(to=identifier, channel='sms')
+        try:
+            twilio_client.verify.v2.services(SERVICE_SID) \
+                .verifications.create(to=identifier, channel='sms')
+            print("OTP sent successfully")
+            logger.info("OTP sent successfully")
+        except Exception as twilio_err:
+            logger.error(f"Twilio SMS error: {twilio_err}")
+            return jsonify({'error': f'Failed to send OTP: {str(twilio_err)}'}), 500
 
         return jsonify({'success': True, 'message': 'SMS OTP sent'}), 200
 
@@ -265,17 +266,47 @@ def send_email_otp():
         if not identifier:
             return jsonify({'error': 'identifier and method ("sms" or "email") are required'}), 400
 
+        print(f"Sending OTP to: {identifier} via email")
+        logger.info(f"Sending OTP to: {identifier} via email")
+
         if not twilio_client:
             return jsonify({'error': 'OTP service unavailable'}), 503
 
-        twilio_client.verify.v2.services(SERVICE_SID) \
-            .verifications.create(to=identifier, channel='email')
+        try:
+            twilio_client.verify.v2.services(SERVICE_SID) \
+                .verifications.create(to=identifier, channel='email')
+            print("OTP sent successfully")
+            logger.info("OTP sent successfully")
+        except Exception as twilio_err:
+            logger.error(f"Twilio email error: {twilio_err}")
+            return jsonify({'error': f'Failed to send OTP: {str(twilio_err)}'}), 500
 
         return jsonify({'success': True, 'message': 'Email OTP sent'}), 200
 
     except Exception as e:
         logger.exception('send_email_otp error')
         return jsonify({'error': 'An internal error occurred'}), 500
+
+
+# ── TEST OTP (temporary) ───────────────────────────────────────────────────────
+@auth_bp.route('/api/test-otp', methods=['GET'])
+def test_otp():
+    test_email = 'diagnovate@outlook.com'
+    print(f"Sending test OTP to: {test_email} via email")
+    logger.info(f"Sending test OTP to: {test_email} via email")
+
+    if not twilio_client:
+        return jsonify({'error': 'OTP service unavailable — Twilio client not initialized'}), 503
+
+    try:
+        twilio_client.verify.v2.services(SERVICE_SID) \
+            .verifications.create(to=test_email, channel='email')
+        print("OTP sent successfully")
+        logger.info("OTP sent successfully")
+        return jsonify({'success': True, 'message': 'OTP sent'}), 200
+    except Exception as e:
+        logger.error(f"test-otp error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # ── AUTH STATUS ────────────────────────────────────────────────────────────────
