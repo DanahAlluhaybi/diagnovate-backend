@@ -4,7 +4,12 @@ nixPkgs = [
   "glib",
   "libxcb",
   "libglvnd",
-  "mesa"
+  "mesa",
+  "libSM",
+  "libXext",
+  "libXrender",
+  "zlib",
+  "python311"
 ]
 
 [variables]
@@ -14,6 +19,5 @@ LD_LIBRARY_PATH = "/nix/var/nix/profiles/default/lib:/usr/lib:/usr/lib/x86_64-li
 [phases.install]
 cmds = [
   "pip install --upgrade pip",
-  "pip install torch==2.2.2+cpu torchvision==0.17.2+cpu --index-url https://download.pytorch.org/whl/cpu --no-cache-dir",
-  "pip install -r requirements.txt --no-cache-dir"
+  "pip install -r requirements.txt"
 ]
