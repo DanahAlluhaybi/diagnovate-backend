@@ -2,29 +2,18 @@
 Image Enhancement — Ultrasound only (RealESRGAN + CLAHE + Denoising + Sharpening).
 Memory-optimised: input capped at 512px, model runs on CPU with gc cleanup.
 Returns Cloudinary URLs instead of base64 to avoid 414 / OOM errors.
+PIL + numpy only — no cv2 dependency.
 """
 import io
 import gc
 import sys
 import base64
 import numpy as np
-
-try:
-    import cv2
-    import numpy as np
-    _cv2_error = None
-    print(f"✅ cv2 loaded successfully: {cv2.__version__}")
-except Exception as e:
-    cv2 = None
-    _cv2_error = str(e)
-    print(f"❌ cv2 import failed: {_cv2_error}")
-    print(f"Python: {sys.version}")
-
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
-from PIL import Image
+from PIL import Image, ImageFilter
 import os
 
 enhancement_bp = Blueprint('enhancement', __name__)
@@ -32,14 +21,11 @@ enhancement_bp = Blueprint('enhancement', __name__)
 
 @enhancement_bp.route('/api/cv2-debug', methods=['GET'])
 def cv2_debug():
-    import glob
-    so_files = glob.glob('/nix/**/*libGL*.so*', recursive=True) + \
-               glob.glob('/usr/lib/**/*libGL*.so*', recursive=True)
     return jsonify({
         'python_version': sys.version,
-        'cv2_version':    cv2.__version__ if cv2 is not None else None,
-        'cv2_error':      _cv2_error,
-        'libGL_so_files': sorted(so_files),
+        'cv2_version':    None,
+        'cv2_error':      'cv2 removed — using PIL+numpy pipeline',
+        'libGL_so_files': [],
     })
 
 
@@ -114,10 +100,10 @@ def get_model():
         model_net.eval()
         _ort_session  = model_net
         _model_loaded = True
-        print("✅ RealESRGAN general-x4v3 loaded")
+        print("RealESRGAN general-x4v3 loaded")
         return _ort_session
     except Exception as e:
-        print(f"⚠️ RealESRGAN failed to load: {e} — using Lanczos fallback")
+        print(f"RealESRGAN failed to load: {e} — using Lanczos fallback")
         _model_loaded = True
         _ort_session  = None
         return None
@@ -142,29 +128,54 @@ def apply_lanczos(img: Image.Image) -> Image.Image:
 
 
 def apply_denoising(img: Image.Image) -> Image.Image:
-    arr      = np.array(img)
-    gray     = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    denoised = cv2.fastNlMeansDenoising(gray, None, h=5, templateWindowSize=7, searchWindowSize=21)
-    bilat    = cv2.bilateralFilter(denoised, d=7, sigmaColor=45, sigmaSpace=45)
-    return Image.fromarray(cv2.cvtColor(bilat, cv2.COLOR_GRAY2RGB))
+    gray     = img.convert('L')
+    denoised = gray.filter(ImageFilter.MedianFilter(size=3))
+    smoothed = denoised.filter(ImageFilter.GaussianBlur(radius=1.5))
+    return smoothed.convert('RGB')
+
+
+def _clahe_numpy(arr: np.ndarray, clip_limit: float = 2.8, tile_grid=(8, 8)) -> np.ndarray:
+    h, w       = arr.shape
+    rows, cols = tile_grid
+    tile_h     = h // rows
+    tile_w     = w // cols
+    result     = np.zeros_like(arr)
+    for i in range(rows):
+        for j in range(cols):
+            y0   = i * tile_h
+            y1   = (i + 1) * tile_h if i < rows - 1 else h
+            x0   = j * tile_w
+            x1   = (j + 1) * tile_w if j < cols - 1 else w
+            tile = arr[y0:y1, x0:x1]
+            n    = tile.size
+            hist, _ = np.histogram(tile.flatten(), 256, [0, 256])
+            clip    = max(1, int(clip_limit * n / 256))
+            excess  = int(np.sum(np.maximum(hist - clip, 0)))
+            hist    = np.minimum(hist, clip)
+            hist   += excess // 256
+            cdf     = hist.cumsum()
+            cdf_min = cdf[cdf > 0].min()
+            denom   = n - cdf_min
+            lut     = np.clip(np.round((cdf - cdf_min) / denom * 255), 0, 255).astype(np.uint8) if denom > 0 else np.arange(256, dtype=np.uint8)
+            result[y0:y1, x0:x1] = lut[tile]
+    return result
 
 
 def apply_clahe(img: Image.Image) -> Image.Image:
-    arr     = np.array(img)
-    lab     = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB)
-    l, a, b = cv2.split(lab)
-    clahe   = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8))
-    l_enh   = clahe.apply(l)
-    table   = np.array([((i / 255.0) ** (1 / 1.2)) * 255 for i in range(256)]).astype("uint8")
-    l_final = cv2.LUT(l_enh, table)
-    result  = cv2.cvtColor(cv2.merge([l_final, a, b]), cv2.COLOR_LAB2RGB)
-    return Image.fromarray(result)
+    ycbcr      = img.convert('YCbCr')
+    y, cb, cr  = ycbcr.split()
+    y_arr      = np.array(y, dtype=np.uint8)
+    y_clahe    = _clahe_numpy(y_arr, clip_limit=2.8, tile_grid=(8, 8))
+    table      = np.array([((i / 255.0) ** (1 / 1.2)) * 255 for i in range(256)]).astype('uint8')
+    y_final    = table[y_clahe]
+    merged     = Image.merge('YCbCr', [Image.fromarray(y_final), cb, cr])
+    return merged.convert('RGB')
 
 
 def apply_sharpening(img: Image.Image) -> Image.Image:
-    arr      = np.array(img).astype(np.float32)
-    blurred  = cv2.GaussianBlur(arr, (0, 0), sigmaX=1.8)
-    sharp    = cv2.addWeighted(arr, 1.5, blurred, -0.5, 0)
+    arr     = np.array(img).astype(np.float32)
+    blurred = np.array(img.filter(ImageFilter.GaussianBlur(radius=1.8))).astype(np.float32)
+    sharp   = arr * 1.5 - blurred * 0.5
     return Image.fromarray(np.clip(sharp, 0, 255).astype(np.uint8))
 
 
@@ -177,7 +188,7 @@ def full_enhancement_pipeline(img: Image.Image) -> tuple:
             img       = apply_realesrgan(img, model)
             sr_method = "RealESRGAN general-x4v3"
         except Exception as e:
-            print(f"⚠️ RealESRGAN inference error: {e} — falling back to Lanczos")
+            print(f"RealESRGAN inference error: {e} — falling back to Lanczos")
             img       = apply_lanczos(img)
             sr_method = "Lanczos x4 (fallback)"
     else:
@@ -208,9 +219,6 @@ def enhance():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
-    if cv2 is None:
-        return jsonify({'error': f'OpenCV not available: {_cv2_error}'}), 503
-
     if 'image' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
 
@@ -236,7 +244,7 @@ def enhance():
                 original_url = upload_to_cloudinary(orig,     "diagnovate/originals")
                 enhanced_url = upload_to_cloudinary(enhanced, "diagnovate/enhanced")
             except Exception as e:
-                print(f"⚠️ Cloudinary upload failed: {e} — falling back to base64")
+                print(f"Cloudinary upload failed: {e} — falling back to base64")
                 cloud_ok = False
 
         if not cloud_ok:
