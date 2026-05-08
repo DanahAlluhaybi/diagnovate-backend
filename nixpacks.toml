@@ -2,7 +2,7 @@
 nixPkgs = [
   "libGL",
   "glib",
-  "libxcb",
+  "xorg.libxcb",
   "libglvnd",
   "mesa",
   "xorg.libSM",
