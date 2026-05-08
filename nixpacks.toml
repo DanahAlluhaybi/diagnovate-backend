@@ -1,23 +1,12 @@
 [phases.setup]
-nixPkgs = [
-  "libGL",
-  "glib",
-  "xorg.libxcb",
-  "libglvnd",
-  "mesa",
-  "xorg.libSM",
-  "xorg.libXext",
-  "xorg.libXrender",
-  "zlib",
-  "python311"
-]
+nixPkgs = ["python311"]
 
 [variables]
 NIXPACKS_PYTHON_VERSION = "3.11"
-LD_LIBRARY_PATH = "/nix/var/nix/profiles/default/lib:/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 
 [phases.install]
 cmds = [
   "pip install --upgrade pip",
+  "pip install opencv-python-headless==4.10.0.84",
   "pip install -r requirements.txt"
 ]
