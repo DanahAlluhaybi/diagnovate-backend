@@ -1,13 +1,19 @@
 [phases.setup]
-nixPkgs = ["libxcb", "libGL", "glib", "libglvnd"]
+nixPkgs = [
+  "python311",
+  "libGL",
+  "glib",
+  "libxcb",
+  "libglvnd"
+]
 
 [variables]
 NIXPACKS_PYTHON_VERSION = "3.11"
+LD_LIBRARY_PATH = "/usr/lib/x86_64-linux-gnu:/nix/var/nix/profiles/default/lib:$LD_LIBRARY_PATH"
 
 [phases.install]
 cmds = [
   "pip install --upgrade pip",
   "pip install torch==2.2.2+cpu torchvision==0.17.2+cpu --index-url https://download.pytorch.org/whl/cpu --no-cache-dir",
-  "apt-get install -y libgl1-mesa-glx libglib2.0-0 || true",
   "pip install -r requirements.txt --no-cache-dir"
 ]

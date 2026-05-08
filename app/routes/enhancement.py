@@ -5,15 +5,21 @@ Returns Cloudinary URLs instead of base64 to avoid 414 / OOM errors.
 """
 import io
 import gc
+import sys
 import base64
 import numpy as np
+
 try:
     import cv2
     import numpy as np
     _cv2_error = None
+    print(f"✅ cv2 loaded successfully: {cv2.__version__}")
 except Exception as e:
     cv2 = None
     _cv2_error = str(e)
+    print(f"❌ cv2 import failed: {_cv2_error}")
+    print(f"Python: {sys.version}")
+
 import cloudinary
 import cloudinary.uploader
 from flask import Blueprint, request, jsonify
@@ -187,7 +193,6 @@ def pil_to_base64(img: Image.Image, fmt: str = "PNG") -> str:
 def enhance():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-
 
     if cv2 is None:
         return jsonify({'error': f'OpenCV not available: {_cv2_error}'}), 503
