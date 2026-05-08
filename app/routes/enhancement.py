@@ -180,20 +180,10 @@ def apply_sharpening(img: Image.Image) -> Image.Image:
 
 
 def full_enhancement_pipeline(img: Image.Image) -> tuple:
-    img = cap_size(img, MAX_INPUT_PX)
-    img = apply_denoising(img)
-    model = get_model()
-    if model is not None:
-        try:
-            img       = apply_realesrgan(img, model)
-            sr_method = "RealESRGAN general-x4v3"
-        except Exception as e:
-            print(f"RealESRGAN inference error: {e} — falling back to Lanczos")
-            img       = apply_lanczos(img)
-            sr_method = "Lanczos x4 (fallback)"
-    else:
-        img       = apply_lanczos(img)
-        sr_method = "Lanczos x4 (fallback)"
+    img       = cap_size(img, MAX_INPUT_PX)
+    img       = apply_denoising(img)
+    img       = apply_lanczos(img)
+    sr_method = "Lanczos x4"
     img = apply_clahe(img)
     img = apply_sharpening(img)
     return img, sr_method
