@@ -120,26 +120,17 @@ def create_app():
         return jsonify({'error': 'An internal error occurred'}), 500
 
     # ── Extensions ────────────────────────────────────────────────────────────
-    import re as _re
     from flask_cors import CORS
-
-    def _is_allowed_origin(origin: str) -> bool:
-        _explicit = [
-            o.strip()
-            for o in os.getenv(
-                'ALLOWED_ORIGINS',
-                'https://diagnovate-plum.vercel.app,http://localhost:3000'
-            ).split(',')
-            if o.strip()
-        ]
-        if origin in _explicit:
-            return True
-        if _re.match(r'https://diagnovate-.*\.vercel\.app$', origin):
-            return True
-        return False
-
     CORS(app,
-         origins=_is_allowed_origin,
+         origins=[
+             'https://diagnovate-plum.vercel.app',
+             'https://diagnovate-41rg-qlh88n5a0-danahalluhaybis-projects.vercel.app',
+             'http://localhost:3000',
+         ] + [
+             o.strip()
+             for o in os.getenv('ALLOWED_ORIGINS', '').split(',')
+             if o.strip()
+         ],
          supports_credentials=False,
          methods=['GET', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
          allow_headers=['Content-Type', 'Authorization', 'Accept'])
