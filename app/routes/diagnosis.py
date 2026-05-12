@@ -21,8 +21,6 @@ from app.services.efficientnet_yolo_service import is_efficientnet_yolo_loaded
 diagnosis_bp = Blueprint('diagnosis', __name__)
 
 MAJORITY_ALIASES = {'majority voting', 'majority', 'voting', 'ensemble', ''}
-
-
 @diagnosis_bp.route('/api/diagnosis/predict', methods=['POST', 'OPTIONS'])
 @limiter.limit("20 per minute")
 @jwt_required()

@@ -35,7 +35,11 @@ def send_email(to_email: str, subject: str, html_content: str):
 def get_admin_or_error():
     """Resolve the JWT identity to an Admin record, returning (admin, None) or (None, error_response)."""
     try:
+        from flask_jwt_extended import get_jwt
         admin_id = get_jwt_identity()
+        claims   = get_jwt()
+        if claims.get('role') != 'admin':
+            return None, (jsonify({'error': 'Admin not found or unauthorized'}), 403)
         admin = Admin.query.get(int(admin_id))
         if not admin:
             return None, (jsonify({'error': 'Admin not found or unauthorized'}), 403)
@@ -66,7 +70,8 @@ def admin_login():
 
         access_token = create_access_token(
             identity=str(admin.id),
-            expires_delta=timedelta(days=1)
+            additional_claims={'role': 'admin'},
+            expires_delta=timedelta(hours=8)
         )
         return jsonify({
             'success':      True,

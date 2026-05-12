@@ -70,7 +70,7 @@ def create_app():
 
     app.config['JWT_SECRET_KEY']          = jwt_secret
     app.config['SECRET_KEY']              = secret_key
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
     app.config['MAX_CONTENT_LENGTH']       = 16 * 1024 * 1024
 
     # ── Request lifecycle ─────────────────────────────────────────────────────
@@ -121,8 +121,16 @@ def create_app():
 
     # ── Extensions ────────────────────────────────────────────────────────────
     from flask_cors import CORS
+    _ALLOWED_ORIGINS = [
+        o.strip()
+        for o in os.getenv(
+            'ALLOWED_ORIGINS',
+            'https://diagnovate-plum.vercel.app,http://localhost:3000'
+        ).split(',')
+        if o.strip()
+    ]
     CORS(app,
-         origins='*',
+         origins=_ALLOWED_ORIGINS,
          supports_credentials=False,
          methods=['GET', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
          allow_headers=['Content-Type', 'Authorization', 'Accept'])
