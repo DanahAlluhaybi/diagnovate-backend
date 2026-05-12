@@ -123,14 +123,16 @@ def create_app():
     from flask_cors import CORS
     CORS(app,
          origins=[
-             'https://diagnovate-plum.vercel.app',
-             'https://diagnovate-41rg-qlh88n5a0-danahalluhaybis-projects.vercel.app',
-             'http://localhost:3000',
-         ] + [
-             o.strip()
-             for o in os.getenv('ALLOWED_ORIGINS', '').split(',')
-             if o.strip()
-         ],
+                     'https://diagnovate.org',
+                     'https://www.diagnovate.org',
+                     'https://diagnovate-plum.vercel.app',
+                     'https://diagnovate-41rg-qlh88n5a0-danahalluhaybis-projects.vercel.app',
+                     'http://localhost:3000',
+                 ] + [
+                     o.strip()
+                     for o in os.getenv('ALLOWED_ORIGINS', '').split(',')
+                     if o.strip()
+                 ],
          supports_credentials=False,
          methods=['GET', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
          allow_headers=['Content-Type', 'Authorization', 'Accept'])
